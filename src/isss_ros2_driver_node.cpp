@@ -69,7 +69,7 @@ public:
 
         RCLCPP_INFO(this->get_logger(), "Saving sonar data to: %s", filename.c_str());
 
-        // Start reading loop in a separate thread
+        // Start reading loop in a separate thread:
         read_thread_ = std::thread(&ISSSonarNode::ReadLoop, this);
     }
 
