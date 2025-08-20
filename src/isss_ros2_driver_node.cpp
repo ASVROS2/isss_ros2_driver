@@ -70,9 +70,12 @@ public:
         RCLCPP_INFO(this->get_logger(), "Saving sonar data to: %s", filename.c_str());
 
         // Start reading loop in a separate thread:
+        // The idea is that, the some functions like recv() is a blocking call, and in doing so the main thread (spin)
+        // will not be able to process incoming messages, so create a separate thread to handle reading data while ros2
+        // is still spinning.
         read_thread_ = std::thread(&ISSSonarNode::ReadLoop, this);
     }
-
+    //Destructor
     ~ISSSonarNode() {
         if (sock_ >= 0) close(sock_);
         if (read_thread_.joinable()) read_thread_.join();
