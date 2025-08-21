@@ -15,6 +15,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "smarc_msgs/msg/sidescan.hpp"
+#include "smarc_msgs/msg/isss.hpp"
 
 typedef unsigned short U16;
 typedef unsigned char U8;
@@ -34,7 +35,8 @@ public:
 
         num_samples_ = 1000;
 
-        sidescan_pub_ = this->create_publisher<smarc_msgs::msg::Sidescan>("isss_stick/isss/raw", 10);
+        //sidescan_pub_ = this->create_publisher<smarc_msgs::msg::Sidescan>("isss_stick/isss/raw", 10);
+        sidescan_pub_ = this->create_publisher<smarc_msgs::msg::ISSS>("isss_stick/isss/raw", 10);
 
         sock_ = socket(AF_INET, SOCK_STREAM, 0);
         if (sock_ < 0) {
@@ -108,14 +110,19 @@ private:
         char dataBuffer[DATA_SIZE];
         char packetBuffer[PACKET_SIZE];
 
-        smarc_msgs::msg::Sidescan msg;
+        //smarc_msgs::msg::Sidescan msg;
+        smarc_msgs::msg::ISSS msg;
         msg.max_duration = float(m_range_ / num_samples_);
         msg.port_channel.resize(num_samples_);
         msg.starboard_channel.resize(num_samples_);
-        msg.port_channel_angle_high.resize(num_samples_);
-        msg.port_channel_angle_low.resize(num_samples_);
-        msg.starboard_channel_angle_high.resize(num_samples_);
-        msg.starboard_channel_angle_low.resize(num_samples_);
+        //msg.port_channel_angle_high.resize(num_samples_);
+        //msg.port_channel_angle_low.resize(num_samples_);
+        //msg.starboard_channel_angle_high.resize(num_samples_);
+        //msg.starboard_channel_angle_low.resize(num_samples_);
+        msg.port_channel_phase_difference.resize(num_samples_);
+        msg.starboard_channel_phase_difference.resize(num_samples_);
+        msg.port_channel_bearing.resize(num_samples_);
+        msg.starboard_channel_bearing.resize(num_samples_);
         msg.extra_channel.resize(12);
 
         bool headerFound = false;
@@ -162,14 +169,41 @@ private:
             msg.header.stamp = this->now();
 
             for (size_t i = 0; i < 12; ++i) msg.extra_channel[i] = (U8)packetBuffer[i];
+            U8 port_channel_angle_high_i, port_channel_angle_low_i;
+            U8 starboard_channel_angle_high_i, starboard_channel_angle_low_i;
+            float port_channel_phase_diff_i, starboard_channel_phase_diff_i;
+            const int16_t MAX_POSITIVE = (U16)32768; // 2^15
+            const int16_t FULL_RANGE   = (U16)65536; // 2^16
+            float sound_vel = 1440.9;
+            float freq = 12.5e6;
+            float baseline = 3.2e-3;
+
             for (size_t i = 0; i < num_samples_; ++i) {
                 size_t offset = HEADER_SIZE + i * 6;
-                msg.port_channel_angle_high[i] = (U8)packetBuffer[offset];
-                msg.port_channel_angle_low[i] = (U8)packetBuffer[offset + 1];
+                //msg.port_channel_angle_high[i] = (U8)packetBuffer[offset];
+                //msg.port_channel_angle_low[i] = (U8)packetBuffer[offset + 1];
+                port_channel_angle_high_i = (U8)packetBuffer[offset];
+                port_channel_angle_low_i = (U8)packetBuffer[offset + 1];
                 msg.port_channel[i] = (U8)packetBuffer[offset + 2];
-                msg.starboard_channel_angle_high[i] = (U8)packetBuffer[offset + 3];
-                msg.starboard_channel_angle_low[i] = (U8)packetBuffer[offset + 4];
+                port_channel_phase_diff_i = (float)((U16(port_channel_angle_high_i) << 8) | U16(port_channel_angle_low_i));
+                if (port_channel_phase_diff_i > MAX_POSITIVE) {
+                    port_channel_phase_diff_i -= FULL_RANGE; // Wrap around to negative range
+                }   
+                msg.port_channel_phase_difference[i] = port_channel_phase_diff_i / 512;
+                msg.port_channel_bearing[i] = std::asin((port_channel_phase_diff_i * sound_vel ) / (freq * baseline));
+
+                //msg.starboard_channel_angle_high[i] = (U8)packetBuffer[offset + 3];
+                //msg.starboard_channel_angle_low[i] = (U8)packetBuffer[offset + 4];
+                starboard_channel_angle_high_i = (U8)packetBuffer[offset +  3] ;
+                starboard_channel_angle_low_i = (U8)packetBuffer[offset + 4];
                 msg.starboard_channel[i] = (U8)packetBuffer[offset + 5];
+                starboard_channel_phase_diff_i = (float)((U16(starboard_channel_angle_high_i) << 8) | U16(starboard_channel_angle_low_i));
+                if (starboard_channel_phase_diff_i > MAX_POSITIVE) {
+                    starboard_channel_phase_diff_i -= FULL_RANGE; // Wrap around to negative range
+                }   
+                msg.starboard_channel_phase_difference[i] = starboard_channel_phase_diff_i / 512;
+                msg.starboard_channel_bearing[i] = std::asin((starboard_channel_phase_diff_i * sound_vel ) / (freq * baseline ));
+                
             }
 
             sidescan_pub_->publish(msg);
@@ -177,7 +211,8 @@ private:
         }
     }
 
-    rclcpp::Publisher<smarc_msgs::msg::Sidescan>::SharedPtr sidescan_pub_;
+    //rclcpp::Publisher<smarc_msgs::msg::Sidescan>::SharedPtr sidescan_pub_;
+    rclcpp::Publisher<smarc_msgs::msg::ISSS>::SharedPtr sidescan_pub_;
     std::string save_path_;
     double m_range_;
     //int num_samples_;
