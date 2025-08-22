@@ -12,6 +12,7 @@
 #include <arpa/inet.h>
 #include <iostream>
 #include <fstream>
+#include <cmath>
 
 #include "rclcpp/rclcpp.hpp"
 #include "smarc_msgs/msg/sidescan.hpp"
@@ -189,7 +190,7 @@ private:
                 if (port_channel_phase_diff_i > MAX_POSITIVE) {
                     port_channel_phase_diff_i -= FULL_RANGE; // Wrap around to negative range
                 }   
-                msg.port_channel_phase_difference[i] = port_channel_phase_diff_i / 512;
+                msg.port_channel_phase_difference[i] = (port_channel_phase_diff_i / 512) * (M_PI / 180.0); // Convert to radians
                 msg.port_channel_bearing[i] = std::asin((port_channel_phase_diff_i * sound_vel ) / (freq * baseline));
 
                 //msg.starboard_channel_angle_high[i] = (U8)packetBuffer[offset + 3];
@@ -201,7 +202,7 @@ private:
                 if (starboard_channel_phase_diff_i > MAX_POSITIVE) {
                     starboard_channel_phase_diff_i -= FULL_RANGE; // Wrap around to negative range
                 }   
-                msg.starboard_channel_phase_difference[i] = starboard_channel_phase_diff_i / 512;
+                msg.starboard_channel_phase_difference[i] = starboard_channel_phase_diff_i / 512 * (M_PI / 180.0); // Convert to radians;
                 msg.starboard_channel_bearing[i] = std::asin((starboard_channel_phase_diff_i * sound_vel ) / (freq * baseline ));
                 
             }
