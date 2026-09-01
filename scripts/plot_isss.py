@@ -1,139 +1,109 @@
+#!/usr/bin/env python3
 """
-This script plots the phase difference and SSS intensity of recorded binary data
-By default it parse the file "log_20m_1000samples.bin" and visualize the intensity of first 1000 pings
-and plot the phase difference at ping 200.
+Plot phase difference and SSS intensity from recorded ISSS binary logs.
+
+Usage:
+  ros2 run isss_ros2_driver plot_isss.py <filename.bin> [num_pings]
+  python3 plot_isss.py <path/to/file.bin> [num_pings]
 """
 
-import numpy as np 
-import matplotlib.pyplot as plt 
-import struct 
-import sys 
-file_ = "/root/ros2_ws/src/isss_ros2_driver/isss_data/"# 1727263582.524461.bin"
-# file_ = "log_20m_1000samples.bin"
-f = open(file_+sys.argv[1], mode="rb")
-data = f.read()
-# print(type(data))
-# print(len(bytes))
+import argparse
+import sys
 
-num_samples = 1000
-bytes_per_ping = 12 + 2 *3 *num_samples
-# print(len(list(data))//bytes_per_ping)
+import matplotlib.pyplot as plt
+import numpy as np
 
-total_nbr_pings = len(list(data))//bytes_per_ping
-nbr_pings  = int(sys.argv[2])
-print(f"total_nbr_pings: {total_nbr_pings} ")
-print(f"plot the first: {nbr_pings} pings")
-# assert False
-sss_port = []
-sss_stbd = []
-sss_phase_port = []
-sss_phase_stbd = []
-sss_phase_port1 = []
-sss_phase_stbd1 = []
-
-"""
-// Header
-       0 // 0xFE
-       1 // 0x05
-       2 // size packet[15:8]  // 3007
-       3 // size packet[ 7:0]
-       4 // Type ISSS=0xE1
-       5 // time[31:2]  [ms]
-       6 // time[23:1]  [ms]
-       7 // time[15:8]  [ms]
-       8 // time[ 7:0]  [ms]
-       9 // 0x01            // FREQ id 
-       10 // decimation_i[15:8]
-       11 // decimation_i[ 7:0]
-
-    // 1000 loop
-        // Channel 0 
-        // phase[15:8]
-        // phase[ 7:0]
-        // RSS
-
-        // Channel 1
-        // phase[15:8]
-        // phase[ 7:0]
-        // RSS
-    // End loop
-"""
-index_list = []
-for i in range(bytes_per_ping*nbr_pings):
-    if int(data[i])==254 and int(data[i+1]==5) and int(data[i+4])==225:
-        index_list.append(i)
-print(len(index_list), nbr_pings)
-print(f'offset: {index_list[0]}')
-# assert len(index_list)==nbr_pings
-
-start_ping_num=0
-end_ping_num=nbr_pings
+BYTES_HEADER = 12
+BYTES_PER_SAMPLE = 6
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Plot ISSS binary log data")
+    parser.add_argument("file", help="Path to .bin log file")
+    parser.add_argument(
+        "num_pings",
+        nargs="?",
+        type=int,
+        default=1000,
+        help="Number of pings to plot (default: 1000)")
+    return parser.parse_args()
 
 
-for (ping_num,i) in enumerate(index_list):
-    if ping_num < start_ping_num or ping_num>end_ping_num :
-        continue
-    sonar_data = data[i+12:i+12+2*3*num_samples]
-    phase_15_8_port = sonar_data[0::6]
-    phase_7_0_port = sonar_data[1::6]
-    rss_port = sonar_data[2::6]
-
-    phase_15_8_stbd = sonar_data[3::6]
-    phase_7_0_stbd = sonar_data[4::6]
-
-    rss_stbd = sonar_data[5::6]
-    # plt.figure()
-    # plt.scatter(np.arange(1000), list(rss_stbd),s=1)
-    # plt.show()
-    # assert False
-
-    sss_port.append(list(rss_port))
-    sss_phase_port.append(list(phase_7_0_port))
-    sss_phase_port1.append(list(phase_15_8_port))
+def find_packet_indices(data, bytes_per_ping, max_index):
+    indices = []
+    for i in range(max_index):
+        if (
+            data[i] == 0xFE and
+            data[i + 1] == 0x05 and
+            data[i + 4] == 0xE1
+        ):
+            indices.append(i)
+    return indices
 
 
-    sss_stbd.append(list(rss_stbd))
-    sss_phase_stbd.append(list(phase_7_0_stbd))
-    sss_phase_stbd1.append(list(phase_15_8_stbd))
-nbr_pings = len(sss_port)
-sss_port = np.array(sss_port[:nbr_pings-1])
-sss_phase_port = np.array(sss_phase_port[:nbr_pings-1])
-sss_phase_port1 = np.array(sss_phase_port1[:nbr_pings-1])
+def main():
+    args = parse_args()
 
-sss_stbd = np.array(sss_stbd[:nbr_pings-1])
-sss_phase_stbd = np.array(sss_phase_stbd[:nbr_pings-1])
-sss_phase_stbd1 = np.array(sss_phase_stbd1[:nbr_pings-1])
+    with open(args.file, mode="rb") as log_file:
+        data = log_file.read()
 
-SSS_phase_port = 256 * sss_phase_port1 + sss_phase_port
-SSS_phase_stbd = 256 * sss_phase_stbd1 + sss_phase_stbd
+    num_samples = 1000
+    bytes_per_ping = BYTES_HEADER + BYTES_PER_SAMPLE * num_samples
+    total_nbr_pings = len(data) // bytes_per_ping
+    nbr_pings = min(args.num_pings, total_nbr_pings)
 
-SSS_phase_port[SSS_phase_port>65536//2]-=65535
-SSS_phase_stbd[SSS_phase_stbd>65536//2]-=65535
+    print(f"total_nbr_pings: {total_nbr_pings}")
+    print(f"plotting: {nbr_pings} pings")
+
+    index_list = find_packet_indices(data, bytes_per_ping, bytes_per_ping * nbr_pings)
+    if not index_list:
+        print("No valid ISSS packets found", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"found packets: {len(index_list)}")
+
+    sss_port = []
+    sss_stbd = []
+    sss_phase_port = []
+    sss_phase_stbd = []
+    sss_phase_port_hi = []
+    sss_phase_stbd_hi = []
+
+    for i in index_list[:nbr_pings]:
+        sonar_data = data[i + BYTES_HEADER:i + BYTES_HEADER + BYTES_PER_SAMPLE * num_samples]
+        sss_port.append(list(sonar_data[2::6]))
+        sss_phase_port.append(list(sonar_data[1::6]))
+        sss_phase_port_hi.append(list(sonar_data[0::6]))
+        sss_stbd.append(list(sonar_data[5::6]))
+        sss_phase_stbd.append(list(sonar_data[4::6]))
+        sss_phase_stbd_hi.append(list(sonar_data[3::6]))
+
+    sss_port = np.array(sss_port)
+    sss_stbd = np.array(sss_stbd)
+    sss_phase_port_hi = np.array(sss_phase_port_hi)
+    sss_phase_stbd_hi = np.array(sss_phase_stbd_hi)
+    sss_phase_port = np.array(sss_phase_port)
+    sss_phase_stbd = np.array(sss_phase_stbd)
+
+    phase_port = 256 * sss_phase_port_hi + sss_phase_port
+    phase_stbd = 256 * sss_phase_stbd_hi + sss_phase_stbd
+
+    idx = min(10, len(sss_port) - 1)
+
+    fig, (int_port, int_stbd) = plt.subplots(1, 2)
+    int_port.imshow(sss_port, cmap="gray", vmax=sss_port.max())
+    int_port.set_title("Port intensity")
+    int_stbd.imshow(sss_stbd, cmap="gray", vmax=sss_stbd.max())
+    int_stbd.set_title("Starboard intensity")
+
+    fig, (ax_phase_port, ax_phase_stbd) = plt.subplots(1, 2, sharey=True)
+    ax_phase_port.scatter(np.arange(num_samples), phase_port[idx], s=1)
+    ax_phase_port.set_title("Port phase")
+    ax_phase_stbd.scatter(np.arange(num_samples), phase_stbd[idx], s=1)
+    ax_phase_stbd.set_title("Starboard phase")
+
+    plt.show()
 
 
-# sss_port[:,:10]=0
-# sss_stbd[:,:10]=0
-
-
-plt.figure()
-plt.imshow(np.concatenate((np.fliplr(sss_stbd), sss_port), axis=1), cmap="gray", vmax=180)
-plt.title("sss")
-#Arka modifications
-plt.savefig('plot2.png')
-print(f"Saved plot to 'plot2.png'")
-# plt.figure()
-# plt.imshow(sss_stbd, cmap="gray", vmax=sss_stbd.max())
-# plt.title("sss_stbd")
-
-idx = int(sys.argv[3])
-plt.figure()
-plt.scatter(np.arange(num_samples*2), np.concatenate((np.fliplr(SSS_phase_stbd), SSS_phase_port),axis=1)[idx], s=1)
-plt.title(f"SSS port phase difference at ping {idx}")
-
-# plt.figure()
-# plt.scatter(np.arange(num_samples), SSS_phase_stbd[idx], s=1)
-# plt.title(f"SSS stbd phase difference at ping {idx}")
-
-plt.show()
+if __name__ == "__main__":
+    main()
