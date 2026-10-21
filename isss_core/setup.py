@@ -22,9 +22,10 @@ setup(
     license="MIT",
     entry_points={
         "console_scripts": [
-            "isss-plot = isss.cli:main_plot",
+            "isss-report = isss.cli:main_report",
             "isss-stream = isss.cli:main_stream",
             "isss-sim = isss.sim:main",
+            "isss-view = isss.cli:main_view",
         ],
     },
 )

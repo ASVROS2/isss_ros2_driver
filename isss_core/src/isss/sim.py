@@ -27,7 +27,9 @@ from isss.protocol import (
     SOP1,
     SOP2,
     counts_from_depression,
+    expected_ping_interval,
     packet_size,
+    range_from_decimation,
 )
 
 REG_DECIMATION = 0x10
@@ -37,13 +39,6 @@ REG_NUM_PHASES = 0x12
 # Header bytes 2-3 read 6007 in every recorded log, including 2000-sample ones,
 # so the field is not the packet size. Mimic the device rather than the docs.
 OBSERVED_SIZE_FIELD = 6007
-# Recorded logs ping once per two-way travel time: 2 * range / ~1500 m/s.
-SOUND_SPEED_FOR_PACING = 1500.0
-
-
-def range_from_registers(decimation: int, num_samples: int) -> float:
-    """Invert ``compute_decimation`` to the range the device was configured for."""
-    return decimation * num_samples * 750.0 / (12.5e6 / 3.0)
 
 
 def packets_from_log(path: str | Path, *, num_samples: int = DEFAULT_SAMPLES) -> list[bytes]:
@@ -211,8 +206,9 @@ class SimulatedSonar:
     def _period(self, registers: dict[int, int]) -> float:
         if self.rate_hz is not None:
             return 1.0 / self.rate_hz
-        range_m = range_from_registers(registers[REG_DECIMATION], registers[REG_NUM_SAMPLES])
-        return 2.0 * range_m / SOUND_SPEED_FOR_PACING
+        return expected_ping_interval(
+            range_from_decimation(registers[REG_DECIMATION], registers[REG_NUM_SAMPLES])
+        )
 
     def _stream(self, client: socket.socket) -> None:
         index = 0

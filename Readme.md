@@ -5,7 +5,7 @@ sensor can be developed and bench-tested without ROS:
 
 | Directory | What | Build |
 |---|---|---|
-| [`isss_core/`](isss_core) | Python package `isss`: protocol, TCP client, driver loop (reconnect, logging, statistics), log reader, simulator, command-line tools. **No ROS dependency.** | `uv` on any machine; also a colcon `ament_python` package |
+| [`isss_core/`](isss_core) | Python package `isss`: protocol, TCP client, driver loop (reconnect, logging, statistics), log reader, simulator, diagnostic report and viewer, command-line tools. **No ROS dependency.** | `uv` on any machine; also a colcon `ament_python` package |
 | [`isss_ros2_driver/`](isss_ros2_driver) | Thin rclpy node around `isss.SonarDriver`: parameters, `isss_msgs/ISSS`, status, services | colcon |
 | [`isss_msgs/`](isss_msgs) | `ISSS.msg` (one ping), `ISSSStatus.msg`, `ConfigureSonar.srv` | colcon |
 | [`docs/protocol.md`](docs/protocol.md) | The protocol, the phase-to-depression model, what has been checked against data, and open questions | |
@@ -23,7 +23,8 @@ uv sync
 uv run pytest                                   # protocol, golden data, driver vs simulator
 uv run isss-sim ../isss_data/1755610748.553636.bin   # pretend to be the sonar on 127.0.0.1:57349
 uv run isss-stream --ip 127.0.0.1 --count 5     # in another shell; or --ip 192.168.2.62 for the real one
-uv run isss-plot ../isss_data/1755610748.553636.bin 100
+uv run isss-report ../isss_data/1755610748.553636.bin   # figures + health checks
+uv run isss-view ../isss_data/1755610748.553636.bin     # interactive; or --ip for a live sonar
 ```
 
 See [`isss_core/README.md`](isss_core/README.md) for the Python API.
@@ -118,7 +119,7 @@ Topic names, services and the `.bin` log format are unchanged. What differs:
   `counts_per_unit_sine` and `boresight_depression_deg`.
 - The status message and service moved to `isss_msgs`
   (e.g. `isss_msgs/srv/ConfigureSonar`).
-- `ros2 run isss_ros2_driver plot_isss.py` is replaced by `isss-plot` from `isss_core`.
+- `ros2 run isss_ros2_driver plot_isss.py` is replaced by `isss-report` and `isss-view` from `isss_core`.
 
 With `save_path` set, logging now starts at launch even if the first connection
 attempt fails (the C++ node only started it after a successful first connect).

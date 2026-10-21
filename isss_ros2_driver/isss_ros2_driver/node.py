@@ -16,14 +16,11 @@ from rclpy.time import Time
 from std_srvs.srv import Trigger
 
 from isss import NotConnectedError, Ping, SonarConfig, SonarDriver
+from isss.protocol import sample_interval
 from isss_msgs.msg import ISSS, ISSSStatus
 from isss_msgs.srv import ConfigureSonar
 
 NODE_NAME = 'isss_ros2_driver_node'
-
-# sample interval = decimation * 3 / 12.5 MHz (docs/protocol.md)
-SAMPLE_CLOCK_HZ = 12.5e6
-SAMPLE_CLOCK_DIVIDER = 3
 
 # Defaults and types match config/isss_driver.yaml; a YAML value of a different
 # type (e.g. 2 vs 2.0) is rejected by rclpy, so keep them in step.
@@ -104,7 +101,7 @@ class IsssDriverNode(Node):
         msg.frequency_id = header.frequency_id
         msg.decimation = header.decimation
         msg.range = float(self._config.range_m)
-        msg.sample_interval = header.decimation * SAMPLE_CLOCK_DIVIDER / SAMPLE_CLOCK_HZ
+        msg.sample_interval = sample_interval(header.decimation)
         msg.sound_velocity = float(self._config.sound_velocity)
         msg.counts_per_unit_sine = float(self._config.counts_per_unit_sine)
         msg.boresight_depression = math.radians(self._config.boresight_depression_deg)

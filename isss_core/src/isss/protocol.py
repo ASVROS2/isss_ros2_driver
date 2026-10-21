@@ -26,6 +26,11 @@ _FULL_RANGE = 65536
 # and wrap there (sonar3d_reference mesh check, Oct 2026; docs/protocol.md).
 PHASE_COUNTS_PER_CYCLE = 20480
 
+SAMPLE_CLOCK_HZ = 12.5e6
+SAMPLE_CLOCK_DIVIDER = 3
+# Recorded logs ping once per two-way travel time at roughly this speed.
+PING_PACING_SOUND_SPEED = 1500.0
+
 
 @dataclass
 class PacketHeader:
@@ -72,7 +77,22 @@ class SampleData:
 
 def compute_decimation(range_m: float, num_samples: int) -> int:
     """Compute the decimation register value from range and sample count."""
-    return int(range_m / num_samples / 750.0 * (12.5e6 / 3.0))
+    return int(range_m / num_samples / 750.0 * (SAMPLE_CLOCK_HZ / SAMPLE_CLOCK_DIVIDER))
+
+
+def range_from_decimation(decimation: int, num_samples: int) -> float:
+    """Invert ``compute_decimation``: the range a decimation and sample count correspond to."""
+    return decimation * num_samples * 750.0 / (SAMPLE_CLOCK_HZ / SAMPLE_CLOCK_DIVIDER)
+
+
+def sample_interval(decimation: int) -> float:
+    """Time between range bins in seconds: ``decimation * 3 / 12.5 MHz``."""
+    return decimation * SAMPLE_CLOCK_DIVIDER / SAMPLE_CLOCK_HZ
+
+
+def expected_ping_interval(range_m: float) -> float:
+    """Ping period seen in every recorded log: one two-way travel time at about 1500 m/s."""
+    return 2.0 * range_m / PING_PACING_SOUND_SPEED
 
 
 def data_size(num_samples: int) -> int:

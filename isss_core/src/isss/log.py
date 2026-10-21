@@ -11,13 +11,14 @@ from isss.config import SonarConfig
 from isss.protocol import (
     BYTES_PER_SAMPLE,
     HEADER_SIZE,
-    PACKET_TYPE_ISSS,
     SOP1,
     SOP2,
     SampleData,
-    parse_header,
+    is_packet_sync_byte,
     parse_payload,
 )
+
+SOP_BYTES = bytes([SOP1, SOP2])
 
 
 def find_packet_offsets(
@@ -26,21 +27,26 @@ def find_packet_offsets(
     num_samples: int = 1000,
     max_offset: int | None = None,
 ) -> list[int]:
-    """Find byte offsets of ISSS packet headers in a binary log."""
+    """Byte offsets of the ISSS packets in a binary log.
+
+    Frames like the live reader: a packet starts where the header pattern
+    matches (``is_packet_sync_byte``), and the search resumes after its payload,
+    so matches inside a payload are not taken for packets.
+    """
     bytes_per_ping = HEADER_SIZE + BYTES_PER_SAMPLE * num_samples
-    search_end = len(data) - 4
+    search_end = len(data) - HEADER_SIZE + 1
     if max_offset is not None:
         search_end = min(search_end, max_offset)
 
     indices: list[int] = []
-    for i in range(max(0, search_end)):
-        if (
-            data[i] == SOP1
-            and data[i + 1] == SOP2
-            and data[i + 4] == PACKET_TYPE_ISSS
-        ):
+    i = data.find(SOP_BYTES, 0, max(0, search_end + 1))
+    while 0 <= i < search_end:
+        if is_packet_sync_byte(data[i : i + HEADER_SIZE]):
             indices.append(i)
-
+            i += bytes_per_ping
+        else:
+            i += 1
+        i = data.find(SOP_BYTES, i, search_end + 1)
     return indices
 
 
