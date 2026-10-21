@@ -37,9 +37,10 @@ It writes `README.md` (a table of steps), `bench.json` (every measurement) and
 leaves the sonar at 20 m, 1000 samples, 2 phases. `--ranges` and `--samples`
 change the sweeps.
 
-To watch the device while testing: `uv run isss-view --ip 192.168.2.62` in
-another terminal (only one client may be connected at a time; run it before or
-after the bench, not during).
+To watch the device: `uv run isss-view --ip 192.168.2.62`, before or after the
+bench rather than during it. Whether the sonar accepts a second client is not
+known (the simulator does not), and a second client's register writes would
+disturb the bench.
 
 ## The steps
 
