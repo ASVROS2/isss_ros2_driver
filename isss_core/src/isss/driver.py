@@ -304,19 +304,19 @@ class SonarDriver:
         decimation = parse_header(packet).decimation
         with self._lock:
             expected = self._expected_decimation
-            if expected is None or decimation == expected:
-                dropped, settled = self._dropped_since_setup, self._settled
+            ok = expected is None or decimation == expected
+            if ok:
+                dropped, self._dropped_since_setup = self._dropped_since_setup, 0
                 self._settled = True
-                self._dropped_since_setup = 0
             else:
                 self._dropped_pings += 1
                 self._dropped_since_setup += 1
-                settled = self._settled
-        if expected is None or decimation == expected:
-            if not settled and dropped:
-                self.log.info(f"Dropped {dropped} pings still at the previous configuration")
+                changed_under_us = self._settled  # another client, or a reset we did not see
+        if ok:
+            if dropped:
+                self.log.info(f"Dropped {dropped} pings not at decimation {expected}")
             return True
-        if settled:  # the sonar changed under us: another client, or a reset we did not see
+        if changed_under_us:
             self._set_error(f"Sonar sends decimation {decimation}, expected {expected}; dropping its pings")
         return False
 

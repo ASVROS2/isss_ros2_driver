@@ -96,6 +96,11 @@ sample count from it. Older logs have none: the August 2025 `isss_data` logs
 were written packet-aligned by the first ROS 2 driver, the July 2024 ones are
 raw socket dumps from the manufacturer reader and start mid-packet.
 
+`SonarDriver` leaves out of its logs, and does not hand on, pings whose header
+decimation is not the one it wrote: those still at the previous configuration
+after connecting or reconfiguring. `DriverStatus.dropped_pings`
+counts them.
+
 ## Phase and depression
 
 The phase of each sample is the electrical phase difference between the two

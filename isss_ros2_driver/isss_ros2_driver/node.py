@@ -154,6 +154,7 @@ class IsssDriverNode(Node):
             KeyValue(key='range_m', value=f'{state.range_m:.2f}'),
             KeyValue(key='num_samples', value=str(state.num_samples)),
             KeyValue(key='decimation', value=str(state.decimation)),
+            KeyValue(key='dropped_pings', value=str(state.dropped_pings)),
         ]
         diagnostics = DiagnosticArray()
         diagnostics.header.stamp = status.header.stamp
