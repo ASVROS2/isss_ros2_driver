@@ -119,7 +119,8 @@ def test_logs_raw_packets(tmp_path):
             assert _wait_for(lambda: driver.status().logging)
             path = Path(driver.status().log_path)
             assert _wait_for(lambda: path.stat().st_size >= 3 * 6012)
-    assert path.read_bytes()[:12] == synthetic_packet(ping_time=0)[:12]
+    header, expected = path.read_bytes()[:12], synthetic_packet()[:12]
+    assert header[:5] + header[9:] == expected[:5] + expected[9:]  # bytes 5-8 are the ping time
 
 
 def test_default_pacing_follows_range():

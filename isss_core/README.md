@@ -9,7 +9,8 @@ Python package `isss` for the **DeepVision Interferometric Side Scan Sonar (ISSS
 - Phase decoding and the calibrated phase-to-depression model (interferometry)
 - `SonarDriver`: read thread with reconnect, raw `.bin` logging and ping-rate statistics
 - `SimulatedSonar` / `isss-sim`: a fake sonar on TCP that replays logs or makes synthetic pings
-- Binary log reading and writing
+- Binary log reading and writing, with a JSON sidecar per log (`isss/sidecar.py`)
+- `isss-bench`: bench test of a connected sonar ([../docs/bench-testing.md](../docs/bench-testing.md))
 - Diagnostics: `isss-report` (figures and health checks for a log) and `isss-view` (interactive viewer for a log or a live sonar)
 
 ## Install
@@ -128,6 +129,8 @@ is unknown; see the open questions in the protocol doc.
 - `test_protocol.py` also covers the phase model: cycle, round trip, aliasing, and agreement with sonar3d_reference
 - `test_driver.py`: connect, register writes, reconfigure, reconnect, logging, pacing against the simulator
 - `test_diagnostics.py`, `test_viz.py`: the vectorised decoder matches the reference one; the checks flag shifted phase, gaps, out-of-water logs; a flat bottom comes out flat; figures, viewer and live buffer work headless
+- `test_sidecar.py`: sidecars describe their logs, segments on reconfiguration, older logs still load
+- `test_bench.py`: the bench passes on the simulator and catches a device that ignores a register
 - `test_packaging.py`: `pyproject.toml` (uv) and `setup.py`/`package.xml` (colcon) stay in step
 
 ## Project layout
@@ -139,6 +142,8 @@ src/isss/
   sonar.py      ISSSonar TCP client
   driver.py     SonarDriver: read loop, reconnect, logging, status
   log.py        Binary log reading and writing
+  sidecar.py    The JSON sidecar next to each log
+  bench.py      isss-bench
   sim.py        SimulatedSonar and the isss-sim command
   diagnostics.py  numpy arrays of pings, health checks, sensor-frame points
   viz.py        report figures and the interactive viewer (matplotlib)

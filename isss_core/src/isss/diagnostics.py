@@ -18,6 +18,7 @@ import numpy as np
 
 from isss.config import SonarConfig
 from isss.log import find_packet_offsets
+from isss.sidecar import read_sidecar, segment_ranges
 from isss.protocol import (
     BYTES_PER_SAMPLE,
     DEFAULT_SAMPLES,
@@ -122,12 +123,40 @@ class PacketBuffer:
         return decode_packets(packets, samples)
 
 
-def load_log(path: str | Path, *, num_samples: int = DEFAULT_SAMPLES) -> PingArrays:
-    """Decode every complete packet in a ``.bin`` log."""
+def load_log(
+    path: str | Path,
+    *,
+    num_samples: int | None = None,
+    segment: int | None = None,
+) -> PingArrays:
+    """Decode every complete packet in a ``.bin`` log.
+
+    Without ``num_samples`` the sample count comes from the log's sidecar, or
+    defaults to 1000 for logs without one. A log whose sidecar lists segments
+    with different sample counts must be read one ``segment`` at a time.
+    """
     data = Path(path).read_bytes()
+    meta = read_sidecar(path)
+    start, end = 0, len(data)
+    if meta is not None and num_samples is None:
+        ranges = segment_ranges(meta, len(data))
+        counts = {seg["num_samples"] for _, _, seg in ranges}
+        if segment is not None:
+            start, end, seg = ranges[segment]
+            num_samples = seg["num_samples"]
+        elif len(counts) > 1:
+            raise ValueError(
+                f"{path} has segments with different sample counts "
+                f"({', '.join(f'{i}: {seg['num_samples']}' for i, (_, _, seg) in enumerate(ranges))}); "
+                "pass segment="
+            )
+        else:
+            num_samples = counts.pop() if counts else DEFAULT_SAMPLES
+    num_samples = num_samples or DEFAULT_SAMPLES
     size = packet_size(num_samples)
-    offsets = [o for o in find_packet_offsets(data, num_samples=num_samples) if o + size <= len(data)]
-    return decode_packets([data[o : o + size] for o in offsets], num_samples)
+    chunk = data[start:end]
+    offsets = [o for o in find_packet_offsets(chunk, num_samples=num_samples) if o + size <= len(chunk)]
+    return decode_packets([chunk[o : o + size] for o in offsets], num_samples)
 
 
 # Returns

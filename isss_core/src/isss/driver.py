@@ -71,6 +71,7 @@ class SonarDriver:
         self._ping_count_window = 0
         self._ping_window_start = time.monotonic()
         self._ping_rate_hz = 0.0
+        self._last_register_writes: list[tuple[int, int]] = []
 
     # Lifecycle
 
@@ -133,7 +134,7 @@ class SonarDriver:
         if not self.is_connected:
             raise NotConnectedError("Sonar is not connected")
         try:
-            self._sonar.setup_sonar()
+            self._note_setup(self._sonar.setup_sonar())
         except OSError as exc:
             self._set_error(f"Failed to write sonar configuration registers: {exc}")
             raise
@@ -146,7 +147,7 @@ class SonarDriver:
         """Start a new raw .bin log; requires ``log_dir``."""
         if self._log_writer is None:
             raise RuntimeError("No log directory configured")
-        path = self._log_writer.open()
+        path = self._log_writer.open(self.config, self._last_register_writes)
         self.log.info(f"Saving sonar data to: {path}")
         return path
 
@@ -222,7 +223,7 @@ class SonarDriver:
             self._set_connected(False)
             return False
         try:
-            self._sonar.setup_sonar()
+            self._note_setup(self._sonar.setup_sonar())
         except OSError as exc:
             self._set_error(f"Failed to configure sonar registers: {exc}")
             self._sonar.disconnect()
@@ -233,6 +234,11 @@ class SonarDriver:
         self._set_error("")
         self.log.info(f"Connected to sonar at {self.config.ip}:{self.config.port}")
         return True
+
+    def _note_setup(self, writes: list[tuple[int, int]]) -> None:
+        self._last_register_writes = writes
+        if self._log_writer is not None:
+            self._log_writer.note_setup(self.config, writes)
 
     def _update_ping_rate(self) -> None:
         now = time.monotonic()

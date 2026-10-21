@@ -15,10 +15,12 @@ import math
 import socket
 import struct
 import threading
+import time
 from pathlib import Path
 from typing import Sequence
 
 from isss.log import find_packet_offsets
+from isss.sidecar import read_sidecar
 from isss.protocol import (
     DEFAULT_SAMPLES,
     FREQ_ID_DEFAULT,
@@ -41,8 +43,11 @@ REG_NUM_PHASES = 0x12
 OBSERVED_SIZE_FIELD = 6007
 
 
-def packets_from_log(path: str | Path, *, num_samples: int = DEFAULT_SAMPLES) -> list[bytes]:
-    """Split a recorded .bin log into raw packets."""
+def packets_from_log(path: str | Path, *, num_samples: int | None = None) -> list[bytes]:
+    """Split a recorded .bin log into raw packets (sample count from its sidecar if not given)."""
+    if num_samples is None:
+        meta = read_sidecar(path)
+        num_samples = meta["segments"][0]["num_samples"] if meta and meta.get("segments") else DEFAULT_SAMPLES
     data = Path(path).read_bytes()
     size = packet_size(num_samples)
     return [
@@ -162,6 +167,10 @@ class SimulatedSonar:
                 pass
             client.close()
 
+    def apply_register(self, reg: int, value: int) -> None:
+        """How a register write changes the device; override to simulate a faulty one."""
+        self.registers[reg] = value
+
     # Serving
 
     def _accept_loop(self) -> None:
@@ -200,8 +209,8 @@ class SimulatedSonar:
                 reg, value = buf[1], (buf[2] << 8) | buf[3]
                 buf = buf[4:]
                 with self._lock:
-                    self.registers[reg] = value
                     self.register_writes.append((reg, value))
+                    self.apply_register(reg, value)
 
     def _period(self, registers: dict[int, int]) -> float:
         if self.rate_hz is not None:
@@ -212,21 +221,24 @@ class SimulatedSonar:
 
     def _stream(self, client: socket.socket) -> None:
         index = 0
-        ping_time = 0
+        # The device counter runs from power-on; start it at an arbitrary uptime and
+        # advance it with real time, so clock measurements against the host are honest.
+        t0 = time.monotonic() - 3600.0
+        templates: dict[tuple[int, int], bytes] = {}
+        next_send = time.monotonic()
         while not self._stop.is_set():
             with self._lock:
                 if self._client is not client:
                     return
                 registers = dict(self.registers)
-            period = self._period(registers)
             if self.packets is not None:
                 packet = self.packets[index % len(self.packets)]
             else:
-                packet = synthetic_packet(
-                    num_samples=registers[REG_NUM_SAMPLES],
-                    ping_time=ping_time,
-                    decimation=registers[REG_DECIMATION],
-                )
+                key = (registers[REG_NUM_SAMPLES], registers[REG_DECIMATION])
+                if key not in templates:  # building a ping takes milliseconds; do it once per setting
+                    templates[key] = synthetic_packet(num_samples=key[0], decimation=key[1])
+                stamp = int((time.monotonic() - t0) * 1e4) & 0xFFFFFFFF
+                packet = templates[key][:5] + stamp.to_bytes(4, "big") + templates[key][9:]
             try:
                 client.sendall(packet)
             except OSError:
@@ -234,8 +246,9 @@ class SimulatedSonar:
             with self._lock:
                 self.pings_sent += 1
             index += 1
-            ping_time += int(period * 1e4)
-            self._stop.wait(period)
+            # Pace against absolute deadlines so send time does not stretch the period
+            next_send = max(next_send + self._period(registers), time.monotonic() - 0.5)
+            self._stop.wait(max(0.0, next_send - time.monotonic()))
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -247,7 +260,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=57349)
     parser.add_argument("--rate", type=float, default=None, help="Pings per second (default: paced by range, like the device)")
-    parser.add_argument("--samples", type=int, default=DEFAULT_SAMPLES, help="Samples per channel in the log")
+    parser.add_argument("--samples", type=int, default=None, help="Samples per channel in the log (default: from its sidecar, else 1000)")
     args = parser.parse_args(argv)
 
     packets = packets_from_log(args.log, num_samples=args.samples) if args.log else None

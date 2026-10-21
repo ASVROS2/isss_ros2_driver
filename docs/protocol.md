@@ -64,6 +64,18 @@ Pings arrive once per two-way travel time for the configured range, at roughly
 1500 m/s: 13.4 ms at 10 m, 20.1 ms at 15 m, 26.8 ms at 20 m, 53.5 ms at 40 m.
 `isss.sim.SimulatedSonar` paces pings the same way by default.
 
+## Log files
+
+A `.bin` log is the sonar's packets exactly as received, back to back: no file
+header, no timestamps, no sample count. Logs written by `isss_core` (the ROS
+node's `save_path`, `SonarDriver(log_dir=...)`, `isss-bench`) also get a JSON
+sidecar `<log>.json` with the configuration segments, register writes,
+calibration, and host time paired with the device ping counter for the first
+and last packet; `isss/sidecar.py` documents the fields. The readers take the
+sample count from it. Older logs have none: the August 2025 `isss_data` logs
+were written packet-aligned by the first ROS 2 driver, the July 2024 ones are
+raw socket dumps from the manufacturer reader and start mid-packet.
+
 ## Phase and depression
 
 The phase of each sample is the electrical phase difference between the two

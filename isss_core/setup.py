@@ -22,6 +22,7 @@ setup(
     license="MIT",
     entry_points={
         "console_scripts": [
+            "isss-bench = isss.bench:main",
             "isss-report = isss.cli:main_report",
             "isss-stream = isss.cli:main_stream",
             "isss-sim = isss.sim:main",

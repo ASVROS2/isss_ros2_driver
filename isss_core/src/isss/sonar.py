@@ -54,15 +54,19 @@ class ISSSonar:
     def is_connected(self) -> bool:
         return self._sock is not None
 
-    def setup_sonar(self) -> None:
-        """Write decimation, sample count, and phase registers."""
+    def setup_sonar(self) -> list[tuple[int, int]]:
+        """Write decimation, sample count, and phase registers; returns the writes made."""
         if not self.is_connected:
             raise RuntimeError("Not connected")
 
-        decimation = compute_decimation(self.config.range_m, self.config.num_samples)
-        self._set_reg(0x10, decimation)
-        self._set_reg(0x11, self.config.num_samples)
-        self._set_reg(0x12, self.config.num_phases)
+        writes = [
+            (0x10, compute_decimation(self.config.range_m, self.config.num_samples)),
+            (0x11, self.config.num_samples),
+            (0x12, self.config.num_phases),
+        ]
+        for reg, value in writes:
+            self.set_register(reg, value)
+        return writes
 
     def configure(
         self,
@@ -117,15 +121,22 @@ class ISSSonar:
         while True:
             yield self.read_ping()
 
-    def _set_reg(self, reg: int, value: int) -> None:
-        if not self.is_connected:
+    def set_register(self, reg: int, value: int) -> None:
+        """Write one 16-bit register: ``[0xFE, reg, value_hi, value_lo]``."""
+        sock = self._sock
+        if sock is None:
             raise RuntimeError("Not connected")
-
-        assert self._sock is not None
         tx = bytes([0xFE, reg & 0xFF, (value >> 8) & 0xFF, value & 0xFF])
-        sent = self._sock.send(tx)
+        sent = sock.send(tx)
         if sent != len(tx):
             raise IOError("Failed to send register write")
+
+    def recv_raw(self, max_bytes: int = 65536) -> bytes:
+        """Whatever bytes are available (up to ``max_bytes``), without framing; b"" on close."""
+        sock = self._sock
+        if sock is None:
+            raise RuntimeError("Not connected")
+        return sock.recv(max_bytes)
 
     @staticmethod
     def _recv_exact(sock: socket.socket, nbytes: int) -> bytes:

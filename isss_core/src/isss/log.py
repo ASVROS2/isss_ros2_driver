@@ -5,7 +5,9 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
-from typing import BinaryIO, Iterator
+from typing import BinaryIO, Iterable, Iterator
+
+from isss import sidecar
 
 from isss.config import SonarConfig
 from isss.protocol import (
@@ -79,35 +81,77 @@ def read_log(
 
 
 class BinLogWriter:
-    """Append raw packets to ``<directory>/<unix time>.bin``, the format the drivers have always written.
+    """Append raw packets to ``<directory>/<unix time>.bin``, with a JSON sidecar.
 
-    Thread-safe: ``write`` may be called from a read loop while ``open``/``close``
-    are called from elsewhere.
+    The ``.bin`` format is what the drivers have always written: packets
+    exactly as received, back to back. The sidecar (``isss.sidecar``) records
+    the configuration, register writes and timing the ``.bin`` cannot.
+
+    Thread-safe: ``write`` may be called from a read loop while ``open``,
+    ``note_setup`` and ``close`` are called from elsewhere.
     """
 
     def __init__(self, directory: str | Path) -> None:
         self.directory = Path(directory)
         self.path: Path | None = None
         self._file: BinaryIO | None = None
+        self._sidecar: dict | None = None
         self._lock = threading.Lock()
 
     @property
     def is_open(self) -> bool:
         return self._file is not None
 
-    def open(self) -> Path:
-        """Start a new log file, closing any current one; returns its path."""
+    @property
+    def sidecar(self) -> dict | None:
+        with self._lock:
+            return None if self._sidecar is None else dict(self._sidecar)
+
+    def open(self, config: SonarConfig, register_writes: Iterable[tuple[int, int]] = ()) -> Path:
+        """Start a new log, closing any current one; returns the ``.bin`` path.
+
+        ``register_writes`` are the writes that configured the sonar for it.
+        """
         with self._lock:
             self._close_unlocked()
             self.directory.mkdir(parents=True, exist_ok=True)
             self.path = self.directory / f"{time.time():.6f}.bin"
             self._file = self.path.open("wb")
+            self._sidecar = sidecar.new_sidecar(self.path, config, register_writes)
+            self._config_key = _config_key(config)
+            sidecar.write_sidecar(self.path, self._sidecar)
             return self.path
+
+    def note_setup(self, config: SonarConfig, register_writes: Iterable[tuple[int, int]]) -> None:
+        """Record register writes, and a new segment if the configuration changed."""
+        with self._lock:
+            if self._sidecar is None or self.path is None:
+                return
+            self._sidecar["register_writes"].extend(sidecar.register_entries(register_writes))
+            if _config_key(config) != self._config_key:
+                self._sidecar["segments"].append(sidecar.segment(config, self._sidecar["bytes"]))
+                self._config_key = _config_key(config)
+            sidecar.write_sidecar(self.path, self._sidecar)
 
     def write(self, packet: bytes) -> None:
         with self._lock:
-            if self._file is not None:
-                self._file.write(packet)
+            if self._file is None or self._sidecar is None:
+                return
+            self._file.write(packet)
+            stamp = {
+                "utc": sidecar.utc_now(),
+                "unix": time.time(),
+                "ping_time": int.from_bytes(packet[5:9], "big") if len(packet) >= HEADER_SIZE else None,
+            }
+            first = self._sidecar["first_packet"] is None
+            if first:
+                self._sidecar["first_packet"] = stamp
+            self._sidecar["last_packet"] = stamp
+            self._sidecar["packets"] += 1
+            self._sidecar["bytes"] += len(packet)
+            if first:
+                assert self.path is not None
+                sidecar.write_sidecar(self.path, self._sidecar)
 
     def close(self) -> None:
         with self._lock:
@@ -117,3 +161,10 @@ class BinLogWriter:
         if self._file is not None:
             self._file.close()
             self._file = None
+            if self._sidecar is not None and self.path is not None:
+                self._sidecar["closed_utc"] = sidecar.utc_now()
+                sidecar.write_sidecar(self.path, self._sidecar)
+
+
+def _config_key(config: SonarConfig) -> tuple:
+    return (config.range_m, config.num_samples, config.num_phases)

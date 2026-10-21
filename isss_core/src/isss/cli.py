@@ -54,16 +54,24 @@ def _calibration_args(parser: argparse.ArgumentParser) -> None:
     from isss.config import SonarConfig
 
     d = SonarConfig()
-    parser.add_argument("--samples", type=int, default=d.num_samples, help="Samples per channel")
+    parser.add_argument("--samples", type=int, default=None,
+                        help="Samples per channel (default: from the log's sidecar, else 1000; live: 1000)")
+    parser.add_argument("--segment", type=int, default=None, help="Segment of a log whose sample count changed")
     parser.add_argument("--sound-velocity", type=float, default=d.sound_velocity, help="m/s, for slant range")
     parser.add_argument("--k", type=float, default=d.counts_per_unit_sine, help="Phase model K (counts per unit sine)")
     parser.add_argument("--boresight", type=float, default=d.boresight_depression_deg, help="Phase model boresight depression [deg]")
 
 
+def d_samples() -> int:
+    from isss.config import SonarConfig
+
+    return SonarConfig().num_samples
+
+
 def _config_from(args: argparse.Namespace, **extra):
     from isss.config import SonarConfig
 
-    return SonarConfig(num_samples=args.samples, sound_velocity=args.sound_velocity,
+    return SonarConfig(num_samples=args.samples or d_samples(), sound_velocity=args.sound_velocity,
                        counts_per_unit_sine=args.k, boresight_depression_deg=args.boresight, **extra)
 
 
@@ -85,9 +93,13 @@ def main_report(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     config = _config_from(args)
-    arrays = load_log(args.file, num_samples=args.samples)
+    try:
+        arrays = load_log(args.file, num_samples=args.samples, segment=args.segment)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        sys.exit(1)
     if arrays.n_pings == 0:
-        print(f"No complete {args.samples}-sample packets in {args.file}", file=sys.stderr)
+        print(f"No complete {arrays.num_samples}-sample packets in {args.file}", file=sys.stderr)
         sys.exit(1)
     out = args.out or args.file.with_name(args.file.stem + "_report")
     out.mkdir(parents=True, exist_ok=True)
@@ -95,7 +107,9 @@ def main_report(argv: list[str] | None = None) -> None:
     report = health(arrays, config)
     for stem, fig in report_figures(arrays, config).items():
         fig.savefig(out / f"{stem}.png", dpi=110)
-    summary = {"log": str(args.file), **report.to_dict(), "config": {
+    from isss.sidecar import read_sidecar
+
+    summary = {"log": str(args.file), "sidecar": read_sidecar(args.file), **report.to_dict(), "config": {
         "sound_velocity": config.sound_velocity,
         "counts_per_unit_sine": config.counts_per_unit_sine,
         "boresight_depression_deg": config.boresight_depression_deg,
@@ -146,7 +160,11 @@ def main_view(argv: list[str] | None = None) -> None:
 
     if args.file is not None:
         config = _config_from(args)
-        viewer = PingViewer(load_log(args.file, num_samples=args.samples), config, title=args.file.name)
+        try:
+            arrays = load_log(args.file, num_samples=args.samples, segment=args.segment)
+        except ValueError as exc:
+            parser.error(str(exc))
+        viewer = PingViewer(arrays, config, title=args.file.name)
         plt.show()
         return
 

@@ -8,7 +8,8 @@ sensor can be developed and bench-tested without ROS:
 | [`isss_core/`](isss_core) | Python package `isss`: protocol, TCP client, driver loop (reconnect, logging, statistics), log reader, simulator, diagnostic report and viewer, command-line tools. **No ROS dependency.** | `uv` on any machine; also a colcon `ament_python` package |
 | [`isss_ros2_driver/`](isss_ros2_driver) | Thin rclpy node around `isss.SonarDriver`: parameters, `isss_msgs/ISSS`, status, services | colcon |
 | [`isss_msgs/`](isss_msgs) | `ISSS.msg` (one ping), `ISSSStatus.msg`, `ConfigureSonar.srv` | colcon |
-| [`docs/protocol.md`](docs/protocol.md) | The protocol, the phase-to-depression model, what has been checked against data, and open questions | |
+| [`docs/protocol.md`](docs/protocol.md) | The protocol, log files, the phase-to-depression model, what has been checked against data, and open questions | |
+| [`docs/bench-testing.md`](docs/bench-testing.md) | How to bench-test a sonar with `isss-bench`, and what to check by hand | |
 | `isss_data/` | Three raw logs from the stick (Aug 2025) | |
 
 All sensor behaviour lives in `isss_core`; the ROS node only translates. A change
@@ -25,6 +26,7 @@ uv run isss-sim ../isss_data/1755610748.553636.bin   # pretend to be the sonar o
 uv run isss-stream --ip 127.0.0.1 --count 5     # in another shell; or --ip 192.168.2.62 for the real one
 uv run isss-report ../isss_data/1755610748.553636.bin   # figures + health checks
 uv run isss-view ../isss_data/1755610748.553636.bin     # interactive; or --ip for a live sonar
+uv run isss-bench --ip 192.168.2.62                     # bench test of a connected sonar, see docs/bench-testing.md
 ```
 
 See [`isss_core/README.md`](isss_core/README.md) for the Python API.
@@ -84,7 +86,7 @@ Defined in [`isss_ros2_driver/config/isss_driver.yaml`](isss_ros2_driver/config/
 | `range` | double | `20.0` | Range in metres |
 | `num_samples` | int | `1000` | Samples per channel |
 | `num_phases` | int | `2` | Number of phases (`0` = off) |
-| `save_path` | string | `""` | Directory for `.bin` logs; empty disables logging |
+| `save_path` | string | `""` | Directory for `.bin` logs (each with a `.json` sidecar); empty disables logging |
 | `frame_id` | string | `isss_link` | Frame for published messages |
 | `sound_velocity` | double | `1440.9` | Sound speed (m/s), reported in the message for slant range |
 | `counts_per_unit_sine` | double | `15218.0` | Interferometer scale K; see [phase model](docs/protocol.md#phase-and-depression) |
