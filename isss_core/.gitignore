@@ -9,6 +9,7 @@ build/
 venv/
 .env
 *.bin
+!tests/data/*.bin
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

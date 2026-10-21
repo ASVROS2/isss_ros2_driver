@@ -16,3 +16,4 @@ class SonarConfig:
     carrier_frequency: float = 12.5e6
     baseline: float = 3.2e-3
     recv_timeout_sec: float = 2.0
+    reconnect_interval_sec: float = 5.0

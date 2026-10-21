@@ -3,3 +3,7 @@ isss_data/*.bin
 build/
 install/
 log/
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/

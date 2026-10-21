@@ -1,12 +1,14 @@
-# isss_python_interface
+# isss_core
 
-Python library for interfacing with the **DeepVision Interferometric Side Scan Sonar (ISSS)** over TCP. This package mirrors the hardware layer from [`isss_ros2_driver`](../isss_ros2_driver) and the manufacturer reference in [`isss_processing`](../isss_processing), without ROS dependencies.
+Python package `isss` for the **DeepVision Interferometric Side Scan Sonar (ISSS)**, with no ROS dependency. It is the single implementation of the sensor: the ROS 2 node in [`../isss_ros2_driver`](../isss_ros2_driver) is a thin wrapper around `isss.SonarDriver`. The protocol is described in [`../docs/protocol.md`](../docs/protocol.md).
 
 ## Features
 
 - TCP connection and register-based sonar configuration
 - Streaming and decoding of interferometric sidescan packets
 - Phase difference and bearing computation (interferometry)
+- `SonarDriver`: read thread with reconnect, raw `.bin` logging and ping-rate statistics
+- `SimulatedSonar` / `isss-sim`: a fake sonar on TCP that replays logs or makes synthetic pings
 - Binary log file reading and plotting utilities
 
 ## Install
@@ -14,7 +16,7 @@ Python library for interfacing with the **DeepVision Interferometric Side Scan S
 Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
-cd isss_python_interface
+cd isss_core
 uv sync
 ```
 
@@ -69,52 +71,37 @@ for samples, packet in iter_packets_from_log("log.bin"):
 isss-plot /path/to/log.bin 500
 ```
 
-## Protocol reference
+### Run the driver loop
 
-### Connection
+```python
+from isss import SonarConfig, SonarDriver
 
-| Parameter | Default |
-|---|---|
-| IP | `192.168.2.62` |
-| Port | `57349` (`0xE005`) |
+def on_ping(ping):
+    print(ping.header.ping_time_sec, max(ping.samples.port_rss))
 
-Configure the host with a static IP on the same subnet as the sonar.
-
-### Register map
-
-| Register | Address | Description |
-|---|---|---|
-| Decimation | `0x10` | Sample decimation factor |
-| Num samples | `0x11` | Samples per channel (default 1000) |
-| Num phases | `0x12` | Phase count (default 2; 0 = off) |
-
-Register write packet: `[0xFE, reg, value_hi, value_lo]`
-
-Decimation formula:
-
-```
-decimation = int(range / num_samples / 750 * (12.5e6 / 3))
+with SonarDriver(SonarConfig(ip="192.168.2.62"), on_ping, log_dir="logs/") as driver:
+    ...  # pings arrive on a background thread; driver.status() for health
 ```
 
-### Data packet format
+### Bench without hardware
 
-**Header (12 bytes)**
+```bash
+uv run isss-sim ../isss_data/1755610748.553636.bin   # or no argument for synthetic pings
+uv run isss-stream --ip 127.0.0.1 --count 5
+```
 
-| Byte | Field |
-|---|---|
-| 0 | `0xFE` — start of packet |
-| 1 | `0x05` — start of packet |
-| 2–3 | Packet size |
-| 4 | Type (`0xE1` = ISSS, `0xE2` = 8-bit sonar) |
-| 5–8 | Ping time (100 µs units) |
-| 9 | Frequency ID (`0x01`) |
-| 10–11 | Decimation |
+The simulator records register writes and paces pings like the device (one per
+two-way travel time). It cannot tell you how the real device behaves where that
+is unknown; see the open questions in the protocol doc.
 
-**Payload (num_samples × 6 bytes)**
+## Tests
 
-Each sample: port phase [15:8], port phase [7:0], port RSS, starboard phase [15:8], starboard phase [7:0], starboard RSS.
+`uv run pytest` runs everything, without hardware:
 
-Default packet size: 6012 bytes (1000 samples).
+- `test_protocol.py`: header and payload decoding on hand-made packets
+- `test_golden.py`: decoding of 5 real pings pinned to a snapshot (bearing excluded)
+- `test_driver.py`: connect, register writes, reconfigure, reconnect, logging, pacing against the simulator
+- `test_packaging.py`: `pyproject.toml` (uv) and `setup.py`/`package.xml` (colcon) stay in step
 
 ## Project layout
 
@@ -123,14 +110,18 @@ src/isss/
   config.py     SonarConfig dataclass
   protocol.py   Packet parsing and constants
   sonar.py      ISSSonar TCP client
-  log.py        Binary log utilities
+  driver.py     SonarDriver: read loop, reconnect, logging, status
+  log.py        Binary log reading and writing
+  sim.py        SimulatedSonar and the isss-sim command
   cli.py        isss-stream / isss-plot commands
+tests/data/     5 real pings and their decoded snapshot
+setup.py, package.xml, resource/   colcon (ament_python) packaging
 ```
 
 ## Related projects
 
-- [`isss_ros2_driver`](../isss_ros2_driver) — ROS 2 driver publishing `smarc_msgs/ISSS`
-- [`isss_processing`](../isss_processing) — Manufacturer reference and analysis scripts
+- [`julRusVal/isss_processing`](https://github.com/julRusVal/isss_processing): manufacturer reference reader, analysis scripts, July 2024 logs
+- [`ASVROS2/post_process_smarc`](https://github.com/ASVROS2/post_process_smarc): ROS post-processing and visualisation of `smarc_msgs/ISSS`
 
 ## License
 

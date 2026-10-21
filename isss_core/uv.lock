@@ -458,8 +458,8 @@ wheels = [
 ]
 
 [[package]]
-name = "isss"
-version = "0.1.0"
+name = "isss-core"
+version = "0.2.0"
 source = { editable = "." }
 
 [package.optional-dependencies]

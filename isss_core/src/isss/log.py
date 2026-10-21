@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from pathlib import Path
-from typing import Iterator
+from typing import BinaryIO, Iterator
 
 from isss.config import SonarConfig
 from isss.protocol import (
@@ -68,3 +70,44 @@ def read_log(
 ) -> list[tuple[SampleData, bytes]]:
     """Read all complete pings from a binary log file."""
     return list(iter_packets_from_log(path, num_samples=num_samples, config=config))
+
+
+class BinLogWriter:
+    """Append raw packets to ``<directory>/<unix time>.bin``, the format the drivers have always written.
+
+    Thread-safe: ``write`` may be called from a read loop while ``open``/``close``
+    are called from elsewhere.
+    """
+
+    def __init__(self, directory: str | Path) -> None:
+        self.directory = Path(directory)
+        self.path: Path | None = None
+        self._file: BinaryIO | None = None
+        self._lock = threading.Lock()
+
+    @property
+    def is_open(self) -> bool:
+        return self._file is not None
+
+    def open(self) -> Path:
+        """Start a new log file, closing any current one; returns its path."""
+        with self._lock:
+            self._close_unlocked()
+            self.directory.mkdir(parents=True, exist_ok=True)
+            self.path = self.directory / f"{time.time():.6f}.bin"
+            self._file = self.path.open("wb")
+            return self.path
+
+    def write(self, packet: bytes) -> None:
+        with self._lock:
+            if self._file is not None:
+                self._file.write(packet)
+
+    def close(self) -> None:
+        with self._lock:
+            self._close_unlocked()
+
+    def _close_unlocked(self) -> None:
+        if self._file is not None:
+            self._file.close()
+            self._file = None

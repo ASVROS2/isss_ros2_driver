@@ -3,13 +3,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "isss"
-version = "0.1.0"
+name = "isss-core"
+version = "0.2.0"
 description = "Python interface for the DeepVision Interferometric Side Scan Sonar (ISSS)"
 readme = "README.md"
-license = "MIT"
+license = {text = "MIT"}  # table form: older setuptools (colcon builds) rejects the string form
 requires-python = ">=3.9"
-authors = [{ name = "KTH SMaRC" }]
+authors = [{ name = "KTH SMaRC" }, { name = "Julian Valdez", email = "jvaldez@kth.se" }]
 keywords = ["sonar", "sidescan", "deepvision", "isss", "interferometry"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -36,9 +36,13 @@ default-groups = ["dev"]
 [project.scripts]
 isss-plot = "isss.cli:main_plot"
 isss-stream = "isss.cli:main_stream"
+isss-sim = "isss.sim:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/isss"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/.venv", "/tests/data"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

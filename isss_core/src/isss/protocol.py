@@ -145,6 +145,22 @@ def parse_payload(payload: bytes, num_samples: int, config: SonarConfig) -> Samp
     )
 
 
+@dataclass
+class Ping:
+    """One decoded ISSS packet: header, samples, and the raw bytes it came from."""
+
+    header: PacketHeader
+    samples: SampleData
+    raw: bytes
+
+
+def parse_packet(packet: bytes, config: SonarConfig) -> Ping:
+    """Parse a full packet (header + payload) using ``config.num_samples``."""
+    header = parse_header(packet[:HEADER_SIZE])
+    samples = parse_payload(packet[HEADER_SIZE:], config.num_samples, config)
+    return Ping(header=header, samples=samples, raw=bytes(packet))
+
+
 def is_packet_sync_byte(
     header_window: bytes,
     *,

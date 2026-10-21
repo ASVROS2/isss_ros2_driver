@@ -33,14 +33,22 @@ class ISSSonar:
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(self.config.recv_timeout_sec)
-        sock.connect((self.config.ip, self.config.port))
+        try:
+            sock.connect((self.config.ip, self.config.port))
+        except OSError:
+            sock.close()
+            raise
         self._sock = sock
 
     def disconnect(self) -> None:
         """Close the TCP connection."""
-        if self._sock is not None:
-            self._sock.close()
-            self._sock = None
+        sock, self._sock = self._sock, None
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)  # unblocks a recv() in another thread
+            except OSError:
+                pass
+            sock.close()
 
     @property
     def is_connected(self) -> bool:
@@ -74,14 +82,14 @@ class ISSSonar:
 
     def read_packet(self) -> bytes:
         """Read one raw ISSS packet from the TCP stream."""
-        if not self.is_connected:
+        sock = self._sock  # local ref: disconnect() may run from another thread
+        if sock is None:
             raise RuntimeError("Not connected")
 
-        assert self._sock is not None
         header_window: deque[int] = deque(maxlen=HEADER_SIZE)
 
         while True:
-            byte = self._sock.recv(1)
+            byte = sock.recv(1)
             if not byte:
                 raise ConnectionError("Connection closed while searching for packet header")
             header_window.append(byte[0])
@@ -90,7 +98,7 @@ class ISSSonar:
                 break
 
         payload_len = data_size(self.config.num_samples)
-        payload = self._recv_exact(payload_len)
+        payload = self._recv_exact(sock, payload_len)
         return header + payload
 
     def read_ping(self) -> tuple[SampleData, bytes]:
@@ -119,12 +127,12 @@ class ISSSonar:
         if sent != len(tx):
             raise IOError("Failed to send register write")
 
-    def _recv_exact(self, nbytes: int) -> bytes:
-        assert self._sock is not None
+    @staticmethod
+    def _recv_exact(sock: socket.socket, nbytes: int) -> bytes:
         chunks: list[bytes] = []
         remaining = nbytes
         while remaining > 0:
-            chunk = self._sock.recv(remaining)
+            chunk = sock.recv(remaining)
             if not chunk:
                 raise ConnectionError("Connection closed while reading packet payload")
             chunks.append(chunk)
