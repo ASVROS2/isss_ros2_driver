@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "isss"
+version = "0.1.0"
+description = "Python interface for the DeepVision Interferometric Side Scan Sonar (ISSS)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [{ name = "KTH SMaRC" }]
+keywords = ["sonar", "sidescan", "deepvision", "isss", "interferometry"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = []
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.5", "numpy>=1.20"]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "matplotlib>=3.5",
+    "numpy>=1.20",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[project.scripts]
+isss-plot = "isss.cli:main_plot"
+isss-stream = "isss.cli:main_stream"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/isss"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
