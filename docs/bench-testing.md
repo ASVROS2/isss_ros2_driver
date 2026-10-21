@@ -6,9 +6,9 @@ the device clock, and our driver and logging. `isss-bench` does that.
 
 ## Before you start
 
-- **Running in air.** Check DeepVision's guidance on operating the transducers
-  out of the water before powering up; keep runs short if in doubt. The full bench
-  takes about two minutes, `--quick` about thirty seconds.
+- **Running in air is safe.** According to DeepVision, these transducers can be
+  operated out of the water (passed on by Julian Valdez, 21 Oct 2026). The full
+  bench takes about two minutes, `--quick` about thirty seconds.
 - Give the host a static IP on the sonar's subnet (default sonar address
   `192.168.2.62`, TCP port 57349) and check `ping 192.168.2.62`.
 - Note the time the sonar was powered on. The clock step reports the device
