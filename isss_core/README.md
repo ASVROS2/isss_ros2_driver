@@ -10,6 +10,7 @@ Python package `isss` for the **DeepVision Interferometric Side Scan Sonar (ISSS
 - `SonarDriver`: read thread with reconnect, raw `.bin` logging and ping-rate statistics
 - `SimulatedSonar` / `isss-sim`: a fake sonar on TCP that replays logs or makes synthetic pings
 - Binary log reading and writing, with a JSON sidecar per log (`isss/sidecar.py`)
+- NetCDF4 export for analysis (`isss-export`, and automatically by the driver when a log closes), also from rosbag2 bags of the old C++ driver; format in [../docs/netcdf-format.md](../docs/netcdf-format.md)
 - `isss-bench`: bench test of a connected sonar ([../docs/bench-testing.md](../docs/bench-testing.md))
 - Diagnostics: `isss-report` (figures and health checks for a log) and `isss-view` (interactive viewer for a log or a live sonar)
 
@@ -29,6 +30,9 @@ To include only the diagnostics extra (numpy, matplotlib) without dev tools:
 ```bash
 uv sync --no-default-groups --extra viz
 ```
+
+The `export` extra (h5netcdf, h5py, numpy) adds NetCDF export. Without it the
+driver still logs `.bin`, and warns that it skips the export.
 
 Run commands inside the project environment:
 
@@ -68,11 +72,26 @@ for samples, packet in iter_packets_from_log("log.bin"):
     print(max(samples.port_rss), max(samples.starboard_rss))
 ```
 
+### Export for analysis
+
+```bash
+isss-export log.bin                   # -> log.nc (uses log.json for timing and segments)
+isss-export rosbag2_2025_12_14-*/     # old-driver bags (smarc_msgs/ISSS) -> rosbag2_....nc
+```
+
+```python
+import xarray as xr
+ds = xr.open_dataset("log.nc")        # intensity, phase_counts, depression (ping, sample, side); time in UTC
+```
+
+The driver writes `<log>.nc` itself when each log closes. Layout and timing:
+[../docs/netcdf-format.md](../docs/netcdf-format.md).
+
 ### Diagnose a log or a live sonar
 
 ```bash
 isss-report log.bin            # figures + health checks in log_report/ (README.md, summary.json, PNGs)
-isss-view log.bin              # interactive: waterfall + selected ping
+isss-view log.bin              # interactive: waterfall + selected ping (also .nc files and old-driver bags)
 isss-view --ip 192.168.2.62    # the same, live (or --ip 127.0.0.1 with isss-sim running)
 ```
 
@@ -135,6 +154,7 @@ is unknown; see the open questions in the protocol doc.
 - `test_driver.py`: connect, register writes, reconfigure, reconnect, logging, pacing against the simulator
 - `test_diagnostics.py`, `test_viz.py`: the vectorised decoder matches the reference one; the checks flag shifted phase, gaps, out-of-water logs; a flat bottom comes out flat; figures, viewer and live buffer work headless
 - `test_sidecar.py`: sidecars describe their logs, segments on reconfiguration, older logs still load
+- `test_netcdf.py`: `.bin` and old-driver bag exports match the decoded pings, files split on reconfiguration, time from sidecar or stamps, the driver exports each log on close
 - `test_bench.py`: the bench passes on the simulator and catches a device that ignores a register
 - `test_packaging.py`: `pyproject.toml` (uv) and `setup.py`/`package.xml` (colcon) stay in step
 
@@ -148,11 +168,13 @@ src/isss/
   driver.py     SonarDriver: read loop, reconnect, logging, status
   log.py        Binary log reading and writing
   sidecar.py    The JSON sidecar next to each log
+  netcdf.py     NetCDF4 export (isss-export) and reading it back
+  bag.py        Raw packets from rosbag2 bags of the old C++ driver
   bench.py      isss-bench
   sim.py        SimulatedSonar and the isss-sim command
   diagnostics.py  numpy arrays of pings, health checks, sensor-frame points
   viz.py        report figures and the interactive viewer (matplotlib)
-  cli.py        isss-stream / isss-report / isss-view commands
+  cli.py        isss-stream / isss-report / isss-view / isss-export commands
 tests/data/     5 real pings and their decoded snapshot
 setup.py, package.xml, resource/   colcon (ament_python) packaging
 ```

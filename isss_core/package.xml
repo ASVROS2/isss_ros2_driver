@@ -7,9 +7,11 @@
   <maintainer email="jvaldez@kth.se">Julian Valdez</maintainer>
   <license>MIT</license>
 
-  <!-- only for isss-report / isss-view; the driver itself is stdlib-only -->
+  <!-- only for isss-report / isss-view / NetCDF export; the driver loop itself is stdlib-only.
+       h5netcdf: pip install h5netcdf; without it the driver skips the export with a warning -->
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-matplotlib</exec_depend>
+  <exec_depend>python3-h5py</exec_depend>
 
   <test_depend>python3-pytest</test_depend>
 

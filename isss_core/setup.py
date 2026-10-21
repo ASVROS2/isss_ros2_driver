@@ -23,6 +23,7 @@ setup(
     entry_points={
         "console_scripts": [
             "isss-bench = isss.bench:main",
+            "isss-export = isss.cli:main_export",
             "isss-report = isss.cli:main_report",
             "isss-stream = isss.cli:main_stream",
             "isss-sim = isss.sim:main",

@@ -31,6 +31,7 @@ PARAMETERS = {
     'num_samples': 1000,
     'num_phases': 2,
     'save_path': '',
+    'export_netcdf': True,
     'frame_id': 'isss_link',
     'sound_velocity': 1440.9,
     'counts_per_unit_sine': 15218.0,
@@ -85,6 +86,7 @@ class IsssDriverNode(Node):
             self._config,
             self._publish_ping,
             log_dir=self._save_path or None,
+            export_netcdf=p['export_netcdf'],
             logger=self.get_logger(),
         )
         self._driver.start()

@@ -7,6 +7,8 @@ from this class, so all behaviour here can be tested on a bench machine.
 
 from __future__ import annotations
 
+import dataclasses
+import importlib.util
 import logging
 import threading
 import time
@@ -20,6 +22,11 @@ from isss.protocol import Ping, compute_decimation, parse_packet
 from isss.sonar import ISSSonar
 
 PingCallback = Callable[[Ping], None]
+
+
+def netcdf_available() -> bool:
+    """Whether the ``export`` extra is installed (checked without importing it)."""
+    return all(importlib.util.find_spec(m) is not None for m in ("numpy", "h5py", "h5netcdf"))
 
 
 class NotConnectedError(RuntimeError):
@@ -47,6 +54,10 @@ class SonarDriver:
     ``on_ping`` is called from the driver's read thread.
     ``logger`` may be a ``logging.Logger`` or a ROS logger; only ``info``,
     ``warning`` and ``error`` with a single string are used.
+
+    With ``export_netcdf`` (and the ``export`` extra installed), every ``.bin``
+    log is also exported to ``<log>.nc`` when it closes (``isss.netcdf``), in
+    the background; ``stop`` waits for running exports.
     """
 
     def __init__(
@@ -56,12 +67,18 @@ class SonarDriver:
         *,
         log_dir: str | Path | None = None,
         logger: Any = None,
+        export_netcdf: bool = True,
     ) -> None:
         self.config = config
         self.on_ping = on_ping
         self.log = logger or logging.getLogger(__name__)
         self._sonar = ISSSonar(config)
-        self._log_writer = BinLogWriter(log_dir) if log_dir else None
+        self._exports: list[threading.Thread] = []
+        if log_dir and export_netcdf and not netcdf_available():
+            self.log.warning("NetCDF export disabled: install isss-core[export] (h5netcdf, h5py, numpy)")
+            export_netcdf = False
+        on_closed = self._export_log if export_netcdf else None
+        self._log_writer = BinLogWriter(log_dir, on_closed=on_closed) if log_dir else None
 
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -96,6 +113,9 @@ class SonarDriver:
             self._thread = None
         if self._log_writer is not None:
             self._log_writer.close()
+        for thread in self._exports:
+            thread.join()
+        self._exports.clear()
         self._set_connected(False)
 
     def __enter__(self) -> SonarDriver:
@@ -150,6 +170,23 @@ class SonarDriver:
         path = self._log_writer.open(self.config, self._last_register_writes)
         self.log.info(f"Saving sonar data to: {path}")
         return path
+
+    def _export_log(self, bin_path: Path) -> None:
+        config = dataclasses.replace(self.config)
+
+        def run() -> None:
+            from isss.netcdf import export_bin
+
+            try:
+                paths = export_bin(bin_path, config=config)
+                self.log.info(f"Exported {bin_path.name} to {', '.join(p.name for p in paths) or 'nothing (no pings)'}")
+            except Exception as exc:  # the .bin is the record; never let an export take the driver down
+                self.log.error(f"NetCDF export of {bin_path} failed: {exc!r}")
+
+        self._exports = [t for t in self._exports if t.is_alive()]
+        thread = threading.Thread(target=run, name=f"isss-export-{bin_path.stem}", daemon=False)
+        self._exports.append(thread)
+        thread.start()
 
     def stop_logging(self) -> None:
         if self._log_writer is not None:

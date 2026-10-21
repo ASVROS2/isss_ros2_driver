@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
-from typing import BinaryIO, Iterable, Iterator
+from typing import BinaryIO, Callable, Iterable, Iterator, Optional
 
 from isss import sidecar
 
@@ -88,11 +88,13 @@ class BinLogWriter:
     the configuration, register writes and timing the ``.bin`` cannot.
 
     Thread-safe: ``write`` may be called from a read loop while ``open``,
-    ``note_setup`` and ``close`` are called from elsewhere.
+    ``note_setup`` and ``close`` are called from elsewhere. ``on_closed`` is
+    called with the ``.bin`` path after each log is closed, outside the lock.
     """
 
-    def __init__(self, directory: str | Path) -> None:
+    def __init__(self, directory: str | Path, on_closed: Optional[Callable[[Path], None]] = None) -> None:
         self.directory = Path(directory)
+        self.on_closed = on_closed
         self.path: Path | None = None
         self._file: BinaryIO | None = None
         self._sidecar: dict | None = None
@@ -113,14 +115,16 @@ class BinLogWriter:
         ``register_writes`` are the writes that configured the sonar for it.
         """
         with self._lock:
-            self._close_unlocked()
+            closed = self._close_unlocked()
             self.directory.mkdir(parents=True, exist_ok=True)
             self.path = self.directory / f"{time.time():.6f}.bin"
             self._file = self.path.open("wb")
             self._sidecar = sidecar.new_sidecar(self.path, config, register_writes)
             self._config_key = _config_key(config)
             sidecar.write_sidecar(self.path, self._sidecar)
-            return self.path
+            path = self.path
+        self._notify(closed)
+        return path
 
     def note_setup(self, config: SonarConfig, register_writes: Iterable[tuple[int, int]]) -> None:
         """Record register writes, and a new segment if the configuration changed."""
@@ -155,15 +159,22 @@ class BinLogWriter:
 
     def close(self) -> None:
         with self._lock:
-            self._close_unlocked()
+            closed = self._close_unlocked()
+        self._notify(closed)
 
-    def _close_unlocked(self) -> None:
-        if self._file is not None:
-            self._file.close()
-            self._file = None
-            if self._sidecar is not None and self.path is not None:
-                self._sidecar["closed_utc"] = sidecar.utc_now()
-                sidecar.write_sidecar(self.path, self._sidecar)
+    def _close_unlocked(self) -> Optional[Path]:
+        if self._file is None:
+            return None
+        self._file.close()
+        self._file = None
+        if self._sidecar is not None and self.path is not None:
+            self._sidecar["closed_utc"] = sidecar.utc_now()
+            sidecar.write_sidecar(self.path, self._sidecar)
+        return self.path
+
+    def _notify(self, closed: Optional[Path]) -> None:
+        if closed is not None and self.on_closed is not None:
+            self.on_closed(closed)
 
 
 def _config_key(config: SonarConfig) -> tuple:

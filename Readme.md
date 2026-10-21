@@ -26,6 +26,7 @@ uv run isss-sim ../isss_data/1755610748.553636.bin   # pretend to be the sonar o
 uv run isss-stream --ip 127.0.0.1 --count 5     # in another shell; or --ip 192.168.2.62 for the real one
 uv run isss-report ../isss_data/1755610748.553636.bin   # figures + health checks
 uv run isss-view ../isss_data/1755610748.553636.bin     # interactive; or --ip for a live sonar
+uv run isss-export ../isss_data/1755610748.553636.bin   # NetCDF4 for analysis, see docs/netcdf-format.md
 uv run isss-bench --ip 192.168.2.62                     # bench test of a connected sonar, see docs/bench-testing.md
 ```
 
@@ -87,6 +88,7 @@ Defined in [`isss_ros2_driver/config/isss_driver.yaml`](isss_ros2_driver/config/
 | `num_samples` | int | `1000` | Samples per channel |
 | `num_phases` | int | `2` | Number of phases (`0` = off) |
 | `save_path` | string | `""` | Directory for `.bin` logs (each with a `.json` sidecar); empty disables logging |
+| `export_netcdf` | bool | `true` | Also write `<log>.nc` ([format](docs/netcdf-format.md)) when each log closes; needs `h5netcdf` (pip) |
 | `frame_id` | string | `isss_link` | Frame for published messages |
 | `sound_velocity` | double | `1440.9` | Sound speed (m/s), reported in the message for slant range |
 | `counts_per_unit_sine` | double | `15218.0` | Interferometer scale K; see [phase model](docs/protocol.md#phase-and-depression) |

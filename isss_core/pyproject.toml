@@ -22,12 +22,20 @@ dependencies = []
 
 [project.optional-dependencies]
 viz = ["matplotlib>=3.5", "numpy>=1.20"]
+export = [
+    "h5netcdf>=1.1",
+    "h5py>=3.0",
+    "numpy>=1.20",
+]
 
 [dependency-groups]
 dev = [
     "pytest>=7.0",
     "matplotlib>=3.5",
     "numpy>=1.20",
+    "h5netcdf>=1.1",
+    "xarray>=2024.7.0",
+    "h5py>=3.0",
 ]
 
 [tool.uv]
@@ -35,6 +43,7 @@ default-groups = ["dev"]
 
 [project.scripts]
 isss-bench = "isss.bench:main"
+isss-export = "isss.cli:main_export"
 isss-report = "isss.cli:main_report"
 isss-stream = "isss.cli:main_stream"
 isss-sim = "isss.sim:main"

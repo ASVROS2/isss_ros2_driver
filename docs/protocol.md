@@ -143,6 +143,12 @@ clamping almost every bearing to ±90°. Their "phase difference" in radians was
   was switched between pings. Port phase sits in a fixed band with no geometry.
   A flat-bottom fit does not reproduce the 2025 calibration, so these logs need
   their own calibration and decode with the current defaults gives wrong angles.
+- `project_data/2025-12-14_Beckholmen/rosbag2_2025_12_14-*` (Dec 2025, 20 m, the
+  calibration recordings above): rosbag2 bags of the old C++ driver on
+  `/isss_stick/isss/raw`, with no `.bin`. `isss-export` rebuilds the packets
+  exactly (`isss/bag.py`). The bags miss about 40% of pings (gaps in the device
+  counter of 12_18_12: 20920 kept, about 13200 missing, longest gap 0.9 s).
+  Whether the sonar, the old driver or the recorder dropped them is not known.
 
 ## Open questions
 

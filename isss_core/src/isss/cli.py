@@ -80,6 +80,70 @@ def _config_from(args: argparse.Namespace, **extra):
                        starboard_phase_sign=-1 if args.flip_starboard else 1, **extra)
 
 
+def _load_arrays(path: Path, args: argparse.Namespace):
+    """Pings of a .bin log, an exported .nc, or a rosbag2 bag of the old driver."""
+    from collections import Counter
+
+    from isss import netcdf
+    from isss.diagnostics import decode_packets, load_log
+
+    if path.suffix == ".nc":
+        try:
+            return netcdf.read_netcdf(path)
+        except ImportError:
+            raise ValueError("reading .nc files needs the export extra: uv sync --extra export")
+    if netcdf.is_bag(path):
+        packets = [p for _, p in netcdf.bag_packets(path, getattr(args, "topic", None))]
+        if not packets:
+            raise ValueError(f"{path} has no ISSS pings")
+        size = Counter(len(p) for p in packets).most_common(1)[0][0]
+        return decode_packets([p for p in packets if len(p) == size], (size - 12) // 6)
+    return load_log(path, num_samples=args.samples, segment=args.segment)
+
+
+def main_export(argv: list[str] | None = None) -> None:
+    """Export .bin logs or rosbag2 bags of the old driver to NetCDF4."""
+    parser = argparse.ArgumentParser(
+        description="Export ISSS pings to NetCDF4 (one self-describing .nc per log; open with xarray). "
+        "Inputs are .bin logs (with their .json sidecar if present) or rosbag2 directories "
+        "recorded by the old C++ driver (smarc_msgs/ISSS).")
+    parser.add_argument("inputs", nargs="+", type=Path, help=".bin logs or rosbag2 bag directories")
+    parser.add_argument("-o", "--out", type=Path, default=None,
+                        help="Output .nc (one input) or directory (default: next to each input)")
+    parser.add_argument("--topic", default=None, help="ISSS topic in a bag (default: the only smarc_msgs/ISSS one)")
+    _calibration_args(parser)
+    args = parser.parse_args(argv)
+    try:
+        from isss import netcdf
+    except ImportError:
+        print("isss-export needs the export extra (h5netcdf, h5py, numpy): uv sync --extra export", file=sys.stderr)
+        sys.exit(1)
+
+    config = _config_from(args)
+    failed = False
+    for path in args.inputs:
+        out = args.out
+        if out is not None and (len(args.inputs) > 1 or out.is_dir()):
+            out = out / (path.name + ".nc" if netcdf.is_bag(path) else path.with_suffix(".nc").name)
+        try:
+            if netcdf.is_bag(path):
+                written = netcdf.export_bag(path, out, config, topic=args.topic)
+            else:
+                written = netcdf.export_bin(path, out, config)
+        except ImportError:
+            print("isss-export needs the export extra (h5netcdf, h5py, numpy): uv sync --extra export", file=sys.stderr)
+            sys.exit(1)
+        except (OSError, ValueError) as exc:
+            print(f"{path}: {exc}", file=sys.stderr)
+            failed = True
+            continue
+        for p in written:
+            print(p)
+        if not written:
+            print(f"{path}: no pings", file=sys.stderr)
+    sys.exit(1 if failed else 0)
+
+
 def main_report(argv: list[str] | None = None) -> None:
     """Write diagnostic figures and health checks for a recorded .bin log."""
     _viz_imports()
@@ -88,18 +152,18 @@ def main_report(argv: list[str] | None = None) -> None:
     import matplotlib
 
     matplotlib.use("Agg")
-    from isss.diagnostics import health, load_log
+    from isss.diagnostics import health
     from isss.viz import report_figures
 
     parser = argparse.ArgumentParser(description="Diagnostic report for an ISSS .bin log")
-    parser.add_argument("file", type=Path, help="Path to .bin log file")
+    parser.add_argument("file", type=Path, help=".bin log, exported .nc, or rosbag2 bag of the old driver")
     parser.add_argument("-o", "--out", type=Path, help="Output directory (default: <log>_report/)")
     _calibration_args(parser)
     args = parser.parse_args(argv)
 
     config = _config_from(args)
     try:
-        arrays = load_log(args.file, num_samples=args.samples, segment=args.segment)
+        arrays = _load_arrays(args.file, args)
     except ValueError as exc:
         print(exc, file=sys.stderr)
         sys.exit(1)
@@ -151,7 +215,8 @@ def main_view(argv: list[str] | None = None) -> None:
         description="View an ISSS log or a live sonar. Click the waterfall or use the slider to pick a ping; "
         "arrow keys step, p toggles phase, f follows the newest ping (live), "
         "1/2 flip the port/starboard angle (an upside-down transducer).")
-    parser.add_argument("file", nargs="?", type=Path, help="Path to .bin log file")
+    parser.add_argument("file", nargs="?", type=Path,
+                        help=".bin log, exported .nc, or rosbag2 bag of the old driver")
     parser.add_argument("--ip", help="Connect to a sonar (or isss-sim) instead of reading a file")
     parser.add_argument("--port", type=int, default=57349)
     parser.add_argument("--range", type=float, default=20.0, dest="range_m", help="Range to configure (live)")
@@ -163,13 +228,12 @@ def main_view(argv: list[str] | None = None) -> None:
 
     import matplotlib.pyplot as plt
 
-    from isss.diagnostics import load_log
     from isss.viz import PingViewer
 
     if args.file is not None:
         config = _config_from(args)
         try:
-            arrays = load_log(args.file, num_samples=args.samples, segment=args.segment)
+            arrays = _load_arrays(args.file, args)
         except ValueError as exc:
             parser.error(str(exc))
         viewer = PingViewer(arrays, config, title=args.file.name)

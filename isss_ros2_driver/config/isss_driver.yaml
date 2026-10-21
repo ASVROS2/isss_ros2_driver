@@ -6,6 +6,7 @@ isss_ros2_driver_node:
     num_samples: 1000
     num_phases: 2
     save_path: ""
+    export_netcdf: true         # also write <log>.nc when each .bin log closes
     frame_id: "isss_link"
     sound_velocity: 1440.9
     counts_per_unit_sine: 15218.0
