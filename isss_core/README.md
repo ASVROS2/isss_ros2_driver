@@ -6,7 +6,7 @@ Python package `isss` for the **DeepVision Interferometric Side Scan Sonar (ISSS
 
 - TCP connection and register-based sonar configuration
 - Streaming and decoding of interferometric sidescan packets
-- Phase difference and bearing computation (interferometry)
+- Phase decoding and the calibrated phase-to-depression model (interferometry)
 - `SonarDriver`: read thread with reconnect, raw `.bin` logging and ping-rate statistics
 - `SimulatedSonar` / `isss-sim`: a fake sonar on TCP that replays logs or makes synthetic pings
 - Binary log file reading and plotting utilities
@@ -99,7 +99,8 @@ is unknown; see the open questions in the protocol doc.
 `uv run pytest` runs everything, without hardware:
 
 - `test_protocol.py`: header and payload decoding on hand-made packets
-- `test_golden.py`: decoding of 5 real pings pinned to a snapshot (bearing excluded)
+- `test_golden.py`: decoding of 5 real pings pinned to a snapshot
+- `test_protocol.py` also covers the phase model: cycle, round trip, aliasing, and agreement with sonar3d_reference
 - `test_driver.py`: connect, register writes, reconfigure, reconnect, logging, pacing against the simulator
 - `test_packaging.py`: `pyproject.toml` (uv) and `setup.py`/`package.xml` (colcon) stay in step
 

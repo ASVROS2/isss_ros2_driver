@@ -1,11 +1,12 @@
 cmake_minimum_required(VERSION 3.8)
-project(isss_ros2_driver_interfaces)
+project(isss_msgs)
 
 find_package(ament_cmake REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/ISSS.msg"
   "msg/ISSSStatus.msg"
   "srv/ConfigureSonar.srv"
   DEPENDENCIES std_msgs

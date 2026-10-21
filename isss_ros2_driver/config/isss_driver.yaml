@@ -8,8 +8,8 @@ isss_ros2_driver_node:
     save_path: ""
     frame_id: "isss_link"
     sound_velocity: 1440.9
-    carrier_frequency: 12500000.0
-    baseline: 0.0032
+    counts_per_unit_sine: 15218.0
+    boresight_depression_deg: 44.5
     recv_timeout_sec: 2
     use_device_time: true
     device_time_offset_sec: 0.0

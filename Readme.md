@@ -6,9 +6,9 @@ sensor can be developed and bench-tested without ROS:
 | Directory | What | Build |
 |---|---|---|
 | [`isss_core/`](isss_core) | Python package `isss`: protocol, TCP client, driver loop (reconnect, logging, statistics), log reader, simulator, command-line tools. **No ROS dependency.** | `uv` on any machine; also a colcon `ament_python` package |
-| [`isss_ros2_driver/`](isss_ros2_driver) | Thin rclpy node around `isss.SonarDriver`: parameters, `smarc_msgs/ISSS`, status, services | colcon |
-| [`isss_ros2_driver_interfaces/`](isss_ros2_driver_interfaces) | `ISSSStatus.msg`, `ConfigureSonar.srv` | colcon |
-| [`docs/protocol.md`](docs/protocol.md) | The protocol, what has been checked against data, and open questions | |
+| [`isss_ros2_driver/`](isss_ros2_driver) | Thin rclpy node around `isss.SonarDriver`: parameters, `isss_msgs/ISSS`, status, services | colcon |
+| [`isss_msgs/`](isss_msgs) | `ISSS.msg` (one ping), `ISSSStatus.msg`, `ConfigureSonar.srv` | colcon |
+| [`docs/protocol.md`](docs/protocol.md) | The protocol, the phase-to-depression model, what has been checked against data, and open questions | |
 | `isss_data/` | Three raw logs from the stick (Aug 2025) | |
 
 All sensor behaviour lives in `isss_core`; the ROS node only translates. A change
@@ -29,8 +29,6 @@ uv run isss-plot ../isss_data/1755610748.553636.bin 100
 See [`isss_core/README.md`](isss_core/README.md) for the Python API.
 
 ## ROS 2
-
-Needs [`smarc_msgs`](https://github.com/ASVROS2/smarc_msgs) (with `ISSS.msg`) in the workspace.
 
 ```bash
 cd ~/ros2_ws/src && git clone https://github.com/ASVROS2/isss_ros2_driver.git
@@ -58,20 +56,20 @@ ros2 launch isss_ros2_driver isss_driver.launch.py namespace:=isss_stick ip:=192
 
 | Topic (relative) | Default FQN | Type | Description |
 |---|---|---|---|
-| `isss/raw` | `/isss/raw` | `smarc_msgs/ISSS` | Interferometric sidescan ping data |
-| `isss/status` | `/isss/status` | `isss_ros2_driver_interfaces/ISSSStatus` | Connection state, ping rate, configuration (1 Hz) |
+| `isss/raw` | `/isss/raw` | `isss_msgs/ISSS` | One ping: intensity, phase counts, depression angles |
+| `isss/status` | `/isss/status` | `isss_msgs/ISSSStatus` | Connection state, ping rate, configuration (1 Hz) |
 | `/diagnostics` | `/diagnostics` | `diagnostic_msgs/DiagnosticArray` | Driver health |
 
 ### Services
 
 | Service | Type | Description |
 |---|---|---|
-| `~/configure_sonar` | `isss_ros2_driver_interfaces/ConfigureSonar` | Runtime range / sample / phase configuration |
+| `~/configure_sonar` | `isss_msgs/ConfigureSonar` | Runtime range / sample / phase configuration |
 | `~/start_logging` | `std_srvs/Trigger` | Start a new raw `.bin` log in `save_path` |
 | `~/stop_logging` | `std_srvs/Trigger` | Stop logging |
 
 ```bash
-ros2 service call /isss_ros2_driver_node/configure_sonar isss_ros2_driver_interfaces/srv/ConfigureSonar "{range: 30.0, num_samples: 1000, num_phases: 2}"
+ros2 service call /isss_ros2_driver_node/configure_sonar isss_msgs/srv/ConfigureSonar "{range: 30.0, num_samples: 1000, num_phases: 2}"
 ```
 
 ### Parameters
@@ -87,30 +85,39 @@ Defined in [`isss_ros2_driver/config/isss_driver.yaml`](isss_ros2_driver/config/
 | `num_phases` | int | `2` | Number of phases (`0` = off) |
 | `save_path` | string | `""` | Directory for `.bin` logs; empty disables logging |
 | `frame_id` | string | `isss_link` | Frame for published messages |
-| `sound_velocity` | double | `1440.9` | Sound speed (m/s) for bearing |
-| `carrier_frequency` | double | `12500000.0` | Used for bearing; see open question 1 in the protocol doc |
-| `baseline` | double | `0.0032` | Receiver baseline (m) |
+| `sound_velocity` | double | `1440.9` | Sound speed (m/s), reported in the message for slant range |
+| `counts_per_unit_sine` | double | `15218.0` | Interferometer scale K; see [phase model](docs/protocol.md#phase-and-depression) |
+| `boresight_depression_deg` | double | `44.5` | Depression of zero phase (includes the mount tilt) |
 | `use_device_time` | bool | `true` | Stamp messages with the device ping counter |
 | `device_time_offset_sec` | double | `0.0` | Added to device time when stamping |
 | `reconnect_interval_sec` | double | `5.0` | Delay between reconnect attempts |
 | `recv_timeout_sec` | int | `2` | Socket receive timeout |
 
-### Message fields (`smarc_msgs/ISSS`)
+### Message (`isss_msgs/ISSS`)
 
-- `type`, `time`, `frequency_id`, `decimation`: from the packet header
-- `frequency`, `baseline`, `sound_velocity`: from parameters
-- `port_channel`, `starboard_channel`: RSS intensity per sample
-- `port_channel_phase_difference`, `starboard_channel_phase_difference`: radians
-- `port_channel_bearing`, `starboard_channel_bearing`: **known to be wrong**, see [`docs/protocol.md`](docs/protocol.md#open-questions)
-- `extra_channel`: the raw 12-byte header
+See [`isss_msgs/msg/ISSS.msg`](isss_msgs/msg/ISSS.msg). Per ping: the packet header
+fields, the configuration in effect (range, sample interval, sound speed, and
+the phase-model K and β0), and per range bin and side the intensity, the signed
+phase counts, and the depression angle below the horizontal of `frame_id`
+(NaN where the model has no solution). Depression aliases for returns more than
+about 42° from the boresight, nadir included; see the protocol doc.
 
 ## Migrating from the C++ driver (≤ 0.1.0)
 
-Topic names, parameters, services and the `.bin` log format are unchanged. Two
-things differ:
+Topic names, services and the `.bin` log format are unchanged. What differs:
 
-- The message and service types moved from `isss_ros2_driver` to
-  `isss_ros2_driver_interfaces` (e.g. `isss_ros2_driver_interfaces/srv/ConfigureSonar`).
+- `isss/raw` publishes `isss_msgs/ISSS` instead of `smarc_msgs/ISSS`, so the
+  driver no longer needs `smarc_msgs`. Field changes: `port_channel` →
+  `port_intensity`; the phase is sent as signed counts (`port_phase_counts`)
+  instead of `counts / 512 · π / 180` radians; the broken `*_bearing` is
+  replaced by `*_depression` from the calibrated phase model; `type`/`time` →
+  `packet_type`/`ping_time`; `extra_channel`, `gain`, `frequency`, `baseline`
+  and `max_duration` are gone, `sample_interval` and the model parameters are new.
+  Subscribers of the old type (e.g. `ASVROS2/post_process_smarc`) need updating.
+- Parameters `carrier_frequency` and `baseline` are replaced by
+  `counts_per_unit_sine` and `boresight_depression_deg`.
+- The status message and service moved to `isss_msgs`
+  (e.g. `isss_msgs/srv/ConfigureSonar`).
 - `ros2 run isss_ros2_driver plot_isss.py` is replaced by `isss-plot` from `isss_core`.
 
 With `save_path` set, logging now starts at launch even if the first connection

@@ -26,6 +26,7 @@ from isss.protocol import (
     PACKET_TYPE_ISSS,
     SOP1,
     SOP2,
+    counts_from_depression,
     packet_size,
 )
 
@@ -62,12 +63,18 @@ def synthetic_packet(
     ping_time: int = 0,
     decimation: int = 111,
     bottom_sample: int | None = None,
+    counts_per_unit_sine: float = 15218.0,
+    boresight_depression_deg: float = 44.5,
 ) -> bytes:
-    """Build one plausible packet: water column, a bottom return, then decay.
+    """Build one ping over a flat bottom: water column, then the seabed.
 
-    Phase is a smooth ramp so decoders produce varied but deterministic values.
+    Range is measured in samples, so a bin ``i`` beyond the first bottom return
+    ``b`` sees the seabed at depression ``asin(b / i)``. Phase follows the
+    interferometer model of ``isss.protocol``, so decoding a synthetic ping
+    recovers that geometry. Both sides see the same seabed.
     """
     bottom = bottom_sample if bottom_sample is not None else num_samples // 5
+    beta0 = math.radians(boresight_depression_deg)
     header = bytearray(HEADER_SIZE)
     header[0], header[1] = SOP1, SOP2
     struct.pack_into(">H", header, 2, OBSERVED_SIZE_FIELD)
@@ -79,10 +86,12 @@ def synthetic_packet(
     payload = bytearray(num_samples * 6)
     for i in range(num_samples):
         if i < bottom:
-            rss = 5
+            rss, counts = 5, 0
         else:
             rss = int(200 * math.exp(-(i - bottom) / (num_samples / 4))) + 10
-        phase = int(4000 * math.sin(i / 37.0)) & 0xFFFF
+            depression = math.asin(bottom / max(i, 1))
+            counts = round(counts_from_depression(depression, counts_per_unit_sine, beta0))
+        phase = counts & 0xFFFF
         payload[i * 6 : i * 6 + 6] = bytes(
             [phase >> 8, phase & 0xFF, rss, phase >> 8, phase & 0xFF, rss]
         )

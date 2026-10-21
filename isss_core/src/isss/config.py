@@ -13,7 +13,9 @@ class SonarConfig:
     num_samples: int = 1000
     num_phases: int = 2
     sound_velocity: float = 1440.9
-    carrier_frequency: float = 12.5e6
-    baseline: float = 3.2e-3
+    # Interferometer calibration: counts = K * sin(beta0 - depression).
+    # Fitted against the Beckholmen dock mesh (sonar3d_reference, Oct 2026).
+    counts_per_unit_sine: float = 15218.0
+    boresight_depression_deg: float = 44.5
     recv_timeout_sec: float = 2.0
     reconnect_interval_sec: float = 5.0

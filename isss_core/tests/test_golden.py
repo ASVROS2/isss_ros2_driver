@@ -1,13 +1,14 @@
 """Pin the decoder's output on real data so any change to decoding is deliberate.
 
-The expected values are a snapshot of the current decoder, not ground truth.
-Bearing is left out on purpose: its formula is unresolved (docs/protocol.md).
+The expected values are a snapshot of the current decoder, not ground truth;
+the phase model behind the depression angles is described in docs/protocol.md.
 After an intended decoder change, regenerate with:
 
     ISSS_REGEN_GOLDEN=1 uv run pytest tests/test_golden.py
 """
 
 import json
+import math
 import os
 from pathlib import Path
 
@@ -20,6 +21,10 @@ from isss.protocol import HEADER_SIZE, parse_header
 DATA = Path(__file__).parent / "data"
 LOG = DATA / "stick_2025-08-19_5pings.bin"
 EXPECTED = DATA / "stick_2025-08-19_5pings.expected.json"
+
+
+def _rounded(value: float):
+    return None if math.isnan(value) else round(value, 9)
 
 
 def _decode() -> list[dict]:
@@ -36,8 +41,10 @@ def _decode() -> list[dict]:
             },
             "port_rss": samples.port_rss,
             "starboard_rss": samples.starboard_rss,
-            "port_phase_diff": [round(v, 9) for v in samples.port_phase_diff],
-            "starboard_phase_diff": [round(v, 9) for v in samples.starboard_phase_diff],
+            "port_phase_counts": samples.port_phase_counts,
+            "starboard_phase_counts": samples.starboard_phase_counts,
+            "port_depression": [_rounded(v) for v in samples.port_depression],
+            "starboard_depression": [_rounded(v) for v in samples.starboard_depression],
         })
     return pings
 

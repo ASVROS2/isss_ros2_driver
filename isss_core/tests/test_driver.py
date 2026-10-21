@@ -132,3 +132,23 @@ def test_default_pacing_follows_range():
             time.sleep(1.0)
             rate = len(pings) - start
     assert 45 <= rate <= 85  # 2 * 10 m / 1500 m/s = 13.3 ms -> ~75 Hz
+
+
+def test_synthetic_ping_decodes_to_flat_bottom():
+    """The simulator's seabed comes back at depression asin(bottom / bin) wherever it is unambiguous."""
+    import math
+
+    from isss.protocol import parse_packet
+
+    config = SonarConfig()
+    bottom = 200
+    ping = parse_packet(synthetic_packet(bottom_sample=bottom), config)
+    beta0 = math.radians(config.boresight_depression_deg)
+    limit = math.asin(10240 / config.counts_per_unit_sine)
+    checked = 0
+    for i in range(bottom, 1000):
+        expected = math.asin(bottom / i)
+        if abs(beta0 - expected) < limit - 0.01:
+            assert ping.samples.starboard_depression[i] == pytest.approx(expected, abs=2e-4)
+            checked += 1
+    assert checked > 700

@@ -1,11 +1,11 @@
 """ROS 2 wrapper around ``isss.SonarDriver``.
 
 Everything about talking to the sonar lives in ``isss_core``. This node only maps
-parameters to a ``SonarConfig``, pings to ``smarc_msgs/ISSS``, driver status to
-``ISSSStatus`` and ``/diagnostics``, and services to driver calls. The
-interface (names, parameters, types) matches the earlier C++ node.
+parameters to a ``SonarConfig``, pings to ``isss_msgs/ISSS``, driver status to
+``ISSSStatus`` and ``/diagnostics``, and services to driver calls.
 """
 
+import math
 from array import array
 
 import rclpy
@@ -13,15 +13,17 @@ from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.time import Time
-from smarc_msgs.msg import ISSS
 from std_srvs.srv import Trigger
 
 from isss import NotConnectedError, Ping, SonarConfig, SonarDriver
-from isss.protocol import HEADER_SIZE
-from isss_ros2_driver_interfaces.msg import ISSSStatus
-from isss_ros2_driver_interfaces.srv import ConfigureSonar
+from isss_msgs.msg import ISSS, ISSSStatus
+from isss_msgs.srv import ConfigureSonar
 
 NODE_NAME = 'isss_ros2_driver_node'
+
+# sample interval = decimation * 3 / 12.5 MHz (docs/protocol.md)
+SAMPLE_CLOCK_HZ = 12.5e6
+SAMPLE_CLOCK_DIVIDER = 3
 
 # Defaults and types match config/isss_driver.yaml; a YAML value of a different
 # type (e.g. 2 vs 2.0) is rejected by rclpy, so keep them in step.
@@ -34,8 +36,8 @@ PARAMETERS = {
     'save_path': '',
     'frame_id': 'isss_link',
     'sound_velocity': 1440.9,
-    'carrier_frequency': 12500000.0,
-    'baseline': 0.0032,
+    'counts_per_unit_sine': 15218.0,
+    'boresight_depression_deg': 44.5,
     'recv_timeout_sec': 2,
     'use_device_time': True,
     'device_time_offset_sec': 0.0,
@@ -63,8 +65,8 @@ class IsssDriverNode(Node):
             num_samples=p['num_samples'],
             num_phases=p['num_phases'],
             sound_velocity=p['sound_velocity'],
-            carrier_frequency=p['carrier_frequency'],
-            baseline=p['baseline'],
+            counts_per_unit_sine=p['counts_per_unit_sine'],
+            boresight_depression_deg=p['boresight_depression_deg'],
             recv_timeout_sec=float(p['recv_timeout_sec']),
             reconnect_interval_sec=p['reconnect_interval_sec'],
         )
@@ -97,22 +99,22 @@ class IsssDriverNode(Node):
         msg = ISSS()
         msg.header.frame_id = self._frame_id
         msg.header.stamp = self._stamp(header.ping_time)
-        msg.type = header.packet_type
-        msg.time = header.ping_time
+        msg.packet_type = header.packet_type
+        msg.ping_time = header.ping_time
         msg.frequency_id = header.frequency_id
-        msg.frequency = float(self._config.carrier_frequency)
         msg.decimation = header.decimation
-        msg.max_duration = float(self._config.range_m / self._config.num_samples)
-        msg.baseline = float(self._config.baseline)
+        msg.range = float(self._config.range_m)
+        msg.sample_interval = header.decimation * SAMPLE_CLOCK_DIVIDER / SAMPLE_CLOCK_HZ
         msg.sound_velocity = float(self._config.sound_velocity)
+        msg.counts_per_unit_sine = float(self._config.counts_per_unit_sine)
+        msg.boresight_depression = math.radians(self._config.boresight_depression_deg)
         # array.array skips rclpy's per-element range checks on 1000-sample arrays
-        msg.port_channel = array('B', samples.port_rss)
-        msg.starboard_channel = array('B', samples.starboard_rss)
-        msg.port_channel_phase_difference = array('f', samples.port_phase_diff)
-        msg.starboard_channel_phase_difference = array('f', samples.starboard_phase_diff)
-        msg.port_channel_bearing = array('f', samples.port_bearing)
-        msg.starboard_channel_bearing = array('f', samples.starboard_bearing)
-        msg.extra_channel = array('B', ping.raw[:HEADER_SIZE])
+        msg.port_intensity = array('B', samples.port_rss)
+        msg.starboard_intensity = array('B', samples.starboard_rss)
+        msg.port_phase_counts = array('h', samples.port_phase_counts)
+        msg.starboard_phase_counts = array('h', samples.starboard_phase_counts)
+        msg.port_depression = array('f', samples.port_depression)
+        msg.starboard_depression = array('f', samples.starboard_depression)
         self._isss_pub.publish(msg)
 
     def _stamp(self, ping_time_100us: int):

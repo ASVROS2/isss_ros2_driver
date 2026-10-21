@@ -22,6 +22,10 @@ SOP2 = 0x05
 _MAX_POSITIVE = 32768
 _FULL_RANGE = 65536
 
+# One electrical phase cycle (2 pi) is 20480 counts: the counts fill +-10240
+# and wrap there (sonar3d_reference mesh check, Oct 2026; docs/protocol.md).
+PHASE_COUNTS_PER_CYCLE = 20480
+
 
 @dataclass
 class PacketHeader:
@@ -47,14 +51,23 @@ class PacketHeader:
 
 @dataclass
 class SampleData:
-    """Decoded interferometric sidescan samples for one ping."""
+    """Decoded interferometric sidescan samples for one ping, one entry per range bin.
+
+    ``*_phase_counts`` are the signed hardware values and lose nothing.
+    ``*_phase_diff`` is the same phase in radians. ``*_depression`` is the
+    angle below the sensor frame's horizontal, toward that side, from the
+    interferometer model (``depression_from_counts``); NaN where the model
+    has no solution. See docs/protocol.md, "Phase and depression".
+    """
 
     port_rss: list[int]
     starboard_rss: list[int]
+    port_phase_counts: list[int]
+    starboard_phase_counts: list[int]
     port_phase_diff: list[float]
     starboard_phase_diff: list[float]
-    port_bearing: list[float]
-    starboard_bearing: list[float]
+    port_depression: list[float]
+    starboard_depression: list[float]
 
 
 def compute_decimation(range_m: float, num_samples: int) -> int:
@@ -91,23 +104,46 @@ def parse_header(header: bytes) -> PacketHeader:
     )
 
 
-def _decode_phase(high: int, low: int) -> float:
+def _decode_phase(high: int, low: int) -> int:
     phase = (high << 8) | low
     if phase > _MAX_POSITIVE:
         phase -= _FULL_RANGE
-    return float(phase)
+    return phase
 
 
-def _phase_to_radians(raw_phase: float) -> float:
-    return (raw_phase / 512.0) * (math.pi / 180.0)
+def phase_counts_to_radians(counts: float) -> float:
+    """Electrical phase difference in radians; 20480 counts are one cycle."""
+    return counts * (2.0 * math.pi / PHASE_COUNTS_PER_CYCLE)
 
 
-def _compute_bearing(raw_phase: float, config: SonarConfig) -> float:
-    asin_input = (raw_phase * config.sound_velocity) / (
-        config.carrier_frequency * config.baseline
-    )
-    asin_input = max(-1.0, min(1.0, asin_input))
-    return math.asin(asin_input)
+def depression_from_counts(
+    counts: float,
+    counts_per_unit_sine: float,
+    boresight_depression_rad: float,
+) -> float:
+    """Angle below horizontal of a return, from its phase counts.
+
+    Two-element interferometer: ``counts = K * sin(beta0 - beta)``, so
+    ``beta = beta0 - asin(counts / K)``. Returns NaN where ``|counts| > K``.
+    Returns more than ``asin(10240 / K)`` (about 42 degrees for the default K)
+    from the boresight alias onto the other side of the cycle; that cannot be
+    detected from one sample.
+    """
+    s = counts / counts_per_unit_sine
+    if not -1.0 <= s <= 1.0:
+        return math.nan
+    return boresight_depression_rad - math.asin(s)
+
+
+def counts_from_depression(
+    depression_rad: float,
+    counts_per_unit_sine: float,
+    boresight_depression_rad: float,
+) -> float:
+    """Forward model: the phase counts a return at ``depression_rad`` produces, wrapped to one cycle."""
+    counts = counts_per_unit_sine * math.sin(boresight_depression_rad - depression_rad)
+    half = PHASE_COUNTS_PER_CYCLE / 2
+    return (counts + half) % PHASE_COUNTS_PER_CYCLE - half
 
 
 def parse_payload(payload: bytes, num_samples: int, config: SonarConfig) -> SampleData:
@@ -116,32 +152,20 @@ def parse_payload(payload: bytes, num_samples: int, config: SonarConfig) -> Samp
     if len(payload) < expected:
         raise ValueError(f"Payload must be at least {expected} bytes, got {len(payload)}")
 
-    port_rss: list[int] = []
-    starboard_rss: list[int] = []
-    port_phase_diff: list[float] = []
-    starboard_phase_diff: list[float] = []
-    port_bearing: list[float] = []
-    starboard_bearing: list[float] = []
-
-    for i in range(num_samples):
-        offset = i * BYTES_PER_SAMPLE
-        port_raw = _decode_phase(payload[offset], payload[offset + 1])
-        port_rss.append(payload[offset + 2])
-        port_phase_diff.append(_phase_to_radians(port_raw))
-        port_bearing.append(_compute_bearing(port_raw, config))
-
-        starboard_raw = _decode_phase(payload[offset + 3], payload[offset + 4])
-        starboard_rss.append(payload[offset + 5])
-        starboard_phase_diff.append(_phase_to_radians(starboard_raw))
-        starboard_bearing.append(_compute_bearing(starboard_raw, config))
+    k = config.counts_per_unit_sine
+    beta0 = math.radians(config.boresight_depression_deg)
+    port_counts = [_decode_phase(payload[i], payload[i + 1]) for i in range(0, expected, BYTES_PER_SAMPLE)]
+    starboard_counts = [_decode_phase(payload[i + 3], payload[i + 4]) for i in range(0, expected, BYTES_PER_SAMPLE)]
 
     return SampleData(
-        port_rss=port_rss,
-        starboard_rss=starboard_rss,
-        port_phase_diff=port_phase_diff,
-        starboard_phase_diff=starboard_phase_diff,
-        port_bearing=port_bearing,
-        starboard_bearing=starboard_bearing,
+        port_rss=list(payload[2:expected:BYTES_PER_SAMPLE]),
+        starboard_rss=list(payload[5:expected:BYTES_PER_SAMPLE]),
+        port_phase_counts=port_counts,
+        starboard_phase_counts=starboard_counts,
+        port_phase_diff=[phase_counts_to_radians(c) for c in port_counts],
+        starboard_phase_diff=[phase_counts_to_radians(c) for c in starboard_counts],
+        port_depression=[depression_from_counts(c, k, beta0) for c in port_counts],
+        starboard_depression=[depression_from_counts(c, k, beta0) for c in starboard_counts],
     )
 
 
