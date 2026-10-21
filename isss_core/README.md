@@ -94,8 +94,13 @@ The figures:
 
 In `isss-view`: click the waterfall or drag the slider to pick a ping, ←/→
 step by one, ↑/↓ by ten, `p` toggles intensity/phase, `f` follows the newest
-ping when live. All tools take `--k`, `--boresight` and `--sound-velocity` to try
-another calibration.
+ping when live. `1`/`2` (or the check boxes) flip the port/starboard phase sign,
+mirroring that side's returns about its boresight: use it to test for a
+transducer mounted upside down, where a flat seabed shows as a near-vertical
+wall on that side. The profile marks which edge of each sector positive and
+negative counts map to. Hovering it reads out the depression, the off-boresight
+angle and the counts expected there. All tools take `--k`, `--boresight`,
+`--flip-port`, `--flip-starboard` and `--sound-velocity` to try another calibration.
 
 ### Run the driver loop
 

@@ -1,5 +1,6 @@
 """The figures and the viewer build and respond, headless."""
 
+import math
 from types import SimpleNamespace
 
 import pytest
@@ -45,6 +46,31 @@ def test_viewer_selection_and_keys():
     assert viewer.index == 16
     viewer._on_key(SimpleNamespace(key="p"))
     assert viewer.show_phase
+
+
+def test_viewer_flips_one_side():
+    config = SonarConfig()
+    viewer = PingViewer(_arrays(), config)
+    viewer._on_key(SimpleNamespace(key="1"))
+    assert viewer.config.port_phase_sign == -1 and viewer.config.starboard_phase_sign == 1
+    assert viewer.flip_boxes.get_status() == [True, False]
+    assert "port flipped" in viewer.ax_prof.get_title(loc="left")
+    viewer.flip_boxes.set_active(1)  # clicking the starboard box
+    assert viewer.config.starboard_phase_sign == -1
+    viewer._on_key(SimpleNamespace(key="1"))
+    assert viewer.config.port_phase_sign == 1 and viewer.flip_boxes.get_status() == [False, True]
+    assert config.port_phase_sign == 1 and config.starboard_phase_sign == 1  # caller's config untouched
+
+
+def test_viewer_angle_readout():
+    viewer = PingViewer(_arrays(), SonarConfig())
+    boresight = viewer.angles_at(math.cos(math.radians(44.5)), -math.sin(math.radians(44.5)))
+    assert boresight["side"] == 1 and abs(boresight["counts"]) < 1e-6
+    shallow = viewer.angles_at(-10.0, -1.0)  # port, near horizontal: above the boresight
+    assert shallow["side"] == 0 and shallow["off_boresight_deg"] > 0 and shallow["counts"] > 0
+    viewer.flip(0)
+    assert viewer.angles_at(-10.0, -1.0)["counts"] == pytest.approx(-shallow["counts"])
+    assert viewer.angles_at(-0.1, -10.0)["aliased"]  # nadir
 
 
 def test_live_viewer_follows_new_pings():

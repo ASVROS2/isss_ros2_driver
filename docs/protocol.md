@@ -91,10 +91,20 @@ the response of a two-element interferometer, `K = 20480 · B / λ`. Both sides 
 the same formula and sign, and `port` is the port side for intensity and phase
 (the channel swap in `ASVROS2/post_process_smarc` is not needed).
 
+`α = asin(counts / K)` is the angle off the boresight, the normal of the
+receiver pair, which points β0 below horizontal. Positive counts are above the
+boresight (shallower, farther out), negative counts below it (toward nadir).
+A transducer mounted upside down, rotated 180° about its boresight so its two
+receivers swap, negates the phase. Its returns then mirror about the boresight
+(β → 2β0 − β), and a flat seabed on that side looks like a near-vertical wall.
+`port_phase_sign` / `starboard_phase_sign` = −1 undo this:
+`counts = sign · K · sin(β0 − β)`. The fitted calibration used +1 for both.
+
 | Parameter | Default | Meaning |
 |---|---|---|
 | `counts_per_unit_sine` (K) | 15218 | Counts per unit sine of the off-boresight angle. With the 3.2 mm baseline this implies roughly 330–340 kHz acoustic frequency (inferred, not documented). |
 | `boresight_depression_deg` (β0) | 44.5 | Depression of zero phase; the arrays look about 45° down |
+| `port_phase_sign`, `starboard_phase_sign` | 1 | −1 for a transducer mounted upside down |
 
 The defaults come from fitting phase against a surveyed mesh of the Beckholmen
 dry dock (December 2025 stick recordings), validated on two held-out recordings:

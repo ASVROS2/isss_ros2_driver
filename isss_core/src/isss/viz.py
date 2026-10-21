@@ -6,12 +6,13 @@ figure) and the viewer (one window) share them.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.widgets import Slider
+from matplotlib.widgets import CheckButtons, Slider
 
 from isss.config import SonarConfig
 from isss.diagnostics import (
@@ -161,14 +162,27 @@ def draw_phase_vs_range(axes, arrays: PingArrays, config: SonarConfig, *, min_ex
         ax.set_ylabel("phase counts")
 
 
+def _phase_signs(config: SonarConfig) -> dict[int, int]:
+    return {PORT: config.port_phase_sign, STARBOARD: config.starboard_phase_sign}
+
+
 def _draw_sector(ax, config: SonarConfig, reach: float) -> None:
-    """Boresight rays and the edges of the unambiguous sector, both sides."""
+    """Boresight rays and the edges of the unambiguous sector, both sides.
+
+    Each edge is labelled with the sign of the counts that land there: with
+    phase sign +1, positive counts are above the boresight (toward horizontal).
+    """
     beta0 = math.radians(config.boresight_depression_deg)
     half = math.asin(min(1.0, HALF_CYCLE / config.counts_per_unit_sine))
-    for sign in (-1.0, 1.0):
+    for side, sign in _phase_signs(config).items():
+        x = -1.0 if side == PORT else 1.0
         for angle, style in ((beta0, "--"), (beta0 - half, ":"), (beta0 + half, ":")):
-            ax.plot([0, sign * reach * math.cos(angle)], [0, -reach * math.sin(angle)],
+            ax.plot([0, x * reach * math.cos(angle)], [0, -reach * math.sin(angle)],
                     color=TEXT_SECONDARY, linestyle=style, linewidth=0.8)
+        for angle, edge, at in ((beta0 - half, 1, 0.97), (beta0 + half, -1, 0.75)):
+            ax.text(x * at * reach * math.cos(angle), -at * reach * math.sin(angle),
+                    f" counts {'+' if edge * sign > 0 else '−'} ", fontsize=7, color=SIDE_COLORS[side],
+                    ha="right" if side == PORT else "left", va="center")
 
 
 def draw_sensor_profile(ax, arrays: PingArrays, config: SonarConfig, *, min_excess: float = 25.0) -> None:
@@ -181,7 +195,12 @@ def draw_sensor_profile(ax, arrays: PingArrays, config: SonarConfig, *, min_exce
         ax.imshow(np.log1p(H.T), origin="lower", aspect="equal", cmap=DENSITY,
                   extent=[xe[0], xe[-1], ye[0], ye[-1]], interpolation="nearest")
     _draw_sector(ax, config, reach)
-    _profile_axes(ax, reach, "Strong returns in the sensor frame, all pings")
+    _profile_axes(ax, reach, _profile_title(config, "Strong returns in the sensor frame, all pings"))
+
+
+def _profile_title(config: SonarConfig, title: str) -> str:
+    flipped = [name for side, name in enumerate(SIDES) if _phase_signs(config)[side] < 0]
+    return title + (f" ({' and '.join(flipped)} flipped)" if flipped else "")
 
 
 def _profile_axes(ax, reach: float, title: str) -> None:
@@ -241,11 +260,14 @@ class PingViewer:
 
     Click the waterfall or drag the slider to select a ping; arrow keys step
     (←/→ by 1, ↑/↓ by 10); ``p`` toggles intensity and phase waterfalls;
-    ``f`` toggles following the newest ping when streaming.
+    ``f`` toggles following the newest ping when streaming; ``1``/``2`` (or
+    the check boxes) flip the port/starboard phase sign, mirroring that side's
+    returns about its boresight, as for a transducer mounted upside down.
+    Hovering the profile reads out the angles and the counts for that point.
     """
 
     def __init__(self, arrays: PingArrays, config: SonarConfig, *, title: str = "ISSS", live: bool = False) -> None:
-        self.config = config
+        self.config = dataclasses.replace(config)  # the flips change our copy only
         self.live = live
         self.arrays = arrays
         self.title = title
@@ -265,9 +287,16 @@ class PingViewer:
             slider_ax = self.fig.add_axes([0.06, 0.03, 0.40, 0.03])
             self.slider = Slider(slider_ax, "ping", 0, max(arrays.n_pings - 1, 1), valinit=self.index,
                                  valstep=1, color=SIDE_COLORS[PORT])
+            flip_ax = self.fig.add_axes([0.55, 0.005, 0.25, 0.07], frameon=False)
+            self._flip_labels = {f"flip {name} (key {side + 1})": side for side, name in enumerate(SIDES)}
+            self.flip_boxes = CheckButtons(flip_ax, list(self._flip_labels),
+                                           [self._phase_sign(side) < 0 for side in (PORT, STARBOARD)])
+            self._readout = self.fig.text(0.80, 0.075, "", fontsize=8, color=TEXT, va="top")
         self.slider.on_changed(lambda v: self._select(int(v), from_slider=True))
+        self.flip_boxes.on_clicked(lambda label: self._set_flip(self._flip_labels[label]))
         self.fig.canvas.mpl_connect("button_press_event", self._on_click)
         self.fig.canvas.mpl_connect("key_press_event", self._on_key)
+        self.fig.canvas.mpl_connect("motion_notify_event", self._on_motion)
         self._draw_waterfall()
         self._draw_ping()
 
@@ -335,7 +364,7 @@ class PingViewer:
                 self.ax_prof.scatter(pts["y"][m], pts["z"][m], s=6 + pts["intensity"][m] / 25.0,
                                      color=SIDE_COLORS[side], linewidths=0, alpha=0.8)
             _draw_sector(self.ax_prof, self.config, reach)
-            _profile_axes(self.ax_prof, reach, "This ping in the sensor frame (strong returns)")
+            _profile_axes(self.ax_prof, reach, _profile_title(self.config, "This ping in the sensor frame (strong returns)"))
 
             t = a.ping_time[i] * 1e-4
             self.fig.suptitle(f"{self.title}   ping {i + 1}/{a.n_pings}   device time {t:.3f} s"
@@ -348,6 +377,48 @@ class PingViewer:
             self.slider.set_val(i)
             self.slider.eventson = True
         self.fig.canvas.draw_idle()
+
+    # Phase sign
+
+    def _phase_sign(self, side: int) -> int:
+        return _phase_signs(self.config)[side]
+
+    def flip(self, side: int) -> None:
+        """Invert one side's phase sign and redraw."""
+        field = "port_phase_sign" if side == PORT else "starboard_phase_sign"
+        setattr(self.config, field, -getattr(self.config, field))
+        if self.flip_boxes.get_status()[side] != (self._phase_sign(side) < 0):
+            self.flip_boxes.eventson = False
+            self.flip_boxes.set_active(side)
+            self.flip_boxes.eventson = True
+        self._draw_ping()
+
+    def _set_flip(self, side: int) -> None:
+        # The box was clicked: it already shows the new state, so follow it.
+        if self.flip_boxes.get_status()[side] != (self._phase_sign(side) < 0):
+            self.flip(side)
+
+    def angles_at(self, y: float, z: float) -> dict[str, float]:
+        """Depression, off-boresight angle and expected counts of a point in the sensor frame."""
+        side = STARBOARD if y >= 0 else PORT
+        beta = math.atan2(-z, abs(y))
+        alpha = math.radians(self.config.boresight_depression_deg) - beta
+        counts = self._phase_sign(side) * self.config.counts_per_unit_sine * math.sin(alpha)
+        aliased = not -HALF_CYCLE <= counts < HALF_CYCLE
+        wrapped = (counts + HALF_CYCLE) % (2 * HALF_CYCLE) - HALF_CYCLE if aliased else counts
+        return {"side": side, "range": math.hypot(y, z), "depression_deg": math.degrees(beta),
+                "off_boresight_deg": math.degrees(alpha), "counts": wrapped, "aliased": aliased}
+
+    def _on_motion(self, event) -> None:
+        text = ""
+        if event.inaxes is self.ax_prof and event.xdata is not None and event.ydata < 0:
+            a = self.angles_at(event.xdata, event.ydata)
+            text = (f"{SIDES[a['side']]}, r {a['range']:.1f} m, depression {a['depression_deg']:.1f}°\n"
+                    f"off boresight {a['off_boresight_deg']:+.1f}°, counts {a['counts']:+.0f}"
+                    f"{' (aliased)' if a['aliased'] else ''}")
+        if text != self._readout.get_text():
+            self._readout.set_text(text)
+            self.fig.canvas.draw_idle()
 
     # Interaction
 
@@ -372,6 +443,8 @@ class PingViewer:
             self.show_phase = not self.show_phase
             self._draw_waterfall()
             self._draw_ping()
+        elif event.key in ("1", "2"):
+            self.flip(PORT if event.key == "1" else STARBOARD)
         elif event.key == "f":
             self.follow = not self.follow
             if self.follow:

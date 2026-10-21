@@ -10,6 +10,8 @@ isss_ros2_driver_node:
     sound_velocity: 1440.9
     counts_per_unit_sine: 15218.0
     boresight_depression_deg: 44.5
+    port_phase_sign: 1          # -1: transducer mounted upside down
+    starboard_phase_sign: 1
     recv_timeout_sec: 2
     use_device_time: true
     device_time_offset_sec: 0.0

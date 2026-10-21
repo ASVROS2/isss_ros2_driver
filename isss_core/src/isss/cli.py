@@ -60,6 +60,9 @@ def _calibration_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--sound-velocity", type=float, default=d.sound_velocity, help="m/s, for slant range")
     parser.add_argument("--k", type=float, default=d.counts_per_unit_sine, help="Phase model K (counts per unit sine)")
     parser.add_argument("--boresight", type=float, default=d.boresight_depression_deg, help="Phase model boresight depression [deg]")
+    parser.add_argument("--flip-port", action="store_true",
+                        help="Port transducer mounted upside down: mirror its returns about the boresight")
+    parser.add_argument("--flip-starboard", action="store_true", help="The same for starboard")
 
 
 def d_samples() -> int:
@@ -72,7 +75,9 @@ def _config_from(args: argparse.Namespace, **extra):
     from isss.config import SonarConfig
 
     return SonarConfig(num_samples=args.samples or d_samples(), sound_velocity=args.sound_velocity,
-                       counts_per_unit_sine=args.k, boresight_depression_deg=args.boresight, **extra)
+                       counts_per_unit_sine=args.k, boresight_depression_deg=args.boresight,
+                       port_phase_sign=-1 if args.flip_port else 1,
+                       starboard_phase_sign=-1 if args.flip_starboard else 1, **extra)
 
 
 def main_report(argv: list[str] | None = None) -> None:
@@ -113,6 +118,8 @@ def main_report(argv: list[str] | None = None) -> None:
         "sound_velocity": config.sound_velocity,
         "counts_per_unit_sine": config.counts_per_unit_sine,
         "boresight_depression_deg": config.boresight_depression_deg,
+        "port_phase_sign": config.port_phase_sign,
+        "starboard_phase_sign": config.starboard_phase_sign,
     }}
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     (out / "README.md").write_text(_report_markdown(args.file, report))
@@ -142,7 +149,8 @@ def main_view(argv: list[str] | None = None) -> None:
     _viz_imports()
     parser = argparse.ArgumentParser(
         description="View an ISSS log or a live sonar. Click the waterfall or use the slider to pick a ping; "
-        "arrow keys step, p toggles phase, f follows the newest ping (live).")
+        "arrow keys step, p toggles phase, f follows the newest ping (live), "
+        "1/2 flip the port/starboard angle (an upside-down transducer).")
     parser.add_argument("file", nargs="?", type=Path, help="Path to .bin log file")
     parser.add_argument("--ip", help="Connect to a sonar (or isss-sim) instead of reading a file")
     parser.add_argument("--port", type=int, default=57349)

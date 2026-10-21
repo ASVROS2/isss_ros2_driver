@@ -21,6 +21,8 @@ float32 sample_interval        # time between range bins [s], from decimation
 float32 sound_velocity         # [m/s]; slant range of bin i is about i * sample_interval * sound_velocity / 2
 float32 counts_per_unit_sine   # K in the phase model below
 float32 boresight_depression   # beta0 in the phase model below [rad]
+int8 port_phase_sign           # sign in the phase model below: -1 for an upside-down transducer
+int8 starboard_phase_sign
 
 # Echo intensity (RSS)
 uint8[] port_intensity
@@ -32,7 +34,7 @@ int16[] port_phase_counts
 int16[] starboard_phase_counts
 
 # Depression angle of the return below the horizontal of frame_id, toward that
-# side [rad], from counts = K * sin(beta0 - depression). NaN where |counts| > K.
+# side [rad], from counts = sign * K * sin(beta0 - depression). NaN where |counts| > K.
 # Returns more than asin(10240 / K) from beta0 (about 42 deg) alias; nadir does.
 float32[] port_depression
 float32[] starboard_depression

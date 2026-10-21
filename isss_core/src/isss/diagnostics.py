@@ -60,7 +60,8 @@ class PingArrays:
 
     def depression(self, config: SonarConfig) -> np.ndarray:
         """Depression angle [rad] per sample and side; NaN where ``|counts| > K``."""
-        s = self.counts.astype(np.float64) / config.counts_per_unit_sine
+        sign = np.array([config.port_phase_sign, config.starboard_phase_sign], dtype=np.float64)
+        s = self.counts.astype(np.float64) * sign / config.counts_per_unit_sine
         with np.errstate(invalid="ignore"):
             alpha = np.arcsin(np.where(np.abs(s) <= 1.0, s, np.nan))
         return math.radians(config.boresight_depression_deg) - alpha

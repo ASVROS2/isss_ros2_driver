@@ -140,16 +140,18 @@ def depression_from_counts(
     counts: float,
     counts_per_unit_sine: float,
     boresight_depression_rad: float,
+    phase_sign: int = 1,
 ) -> float:
     """Angle below horizontal of a return, from its phase counts.
 
-    Two-element interferometer: ``counts = K * sin(beta0 - beta)``, so
-    ``beta = beta0 - asin(counts / K)``. Returns NaN where ``|counts| > K``.
+    Two-element interferometer: ``counts = sign * K * sin(beta0 - beta)``, so
+    ``beta = beta0 - asin(sign * counts / K)``. ``phase_sign`` is -1 for a
+    transducer mounted upside down. Returns NaN where ``|counts| > K``.
     Returns more than ``asin(10240 / K)`` (about 42 degrees for the default K)
     from the boresight alias onto the other side of the cycle; that cannot be
     detected from one sample.
     """
-    s = counts / counts_per_unit_sine
+    s = phase_sign * counts / counts_per_unit_sine
     if not -1.0 <= s <= 1.0:
         return math.nan
     return boresight_depression_rad - math.asin(s)
@@ -159,9 +161,10 @@ def counts_from_depression(
     depression_rad: float,
     counts_per_unit_sine: float,
     boresight_depression_rad: float,
+    phase_sign: int = 1,
 ) -> float:
     """Forward model: the phase counts a return at ``depression_rad`` produces, wrapped to one cycle."""
-    counts = counts_per_unit_sine * math.sin(boresight_depression_rad - depression_rad)
+    counts = phase_sign * counts_per_unit_sine * math.sin(boresight_depression_rad - depression_rad)
     half = PHASE_COUNTS_PER_CYCLE / 2
     return (counts + half) % PHASE_COUNTS_PER_CYCLE - half
 
@@ -184,8 +187,9 @@ def parse_payload(payload: bytes, num_samples: int, config: SonarConfig) -> Samp
         starboard_phase_counts=starboard_counts,
         port_phase_diff=[phase_counts_to_radians(c) for c in port_counts],
         starboard_phase_diff=[phase_counts_to_radians(c) for c in starboard_counts],
-        port_depression=[depression_from_counts(c, k, beta0) for c in port_counts],
-        starboard_depression=[depression_from_counts(c, k, beta0) for c in starboard_counts],
+        port_depression=[depression_from_counts(c, k, beta0, config.port_phase_sign) for c in port_counts],
+        starboard_depression=[depression_from_counts(c, k, beta0, config.starboard_phase_sign)
+                              for c in starboard_counts],
     )
 
 

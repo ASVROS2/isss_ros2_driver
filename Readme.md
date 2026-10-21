@@ -91,6 +91,8 @@ Defined in [`isss_ros2_driver/config/isss_driver.yaml`](isss_ros2_driver/config/
 | `sound_velocity` | double | `1440.9` | Sound speed (m/s), reported in the message for slant range |
 | `counts_per_unit_sine` | double | `15218.0` | Interferometer scale K; see [phase model](docs/protocol.md#phase-and-depression) |
 | `boresight_depression_deg` | double | `44.5` | Depression of zero phase (includes the mount tilt) |
+| `port_phase_sign` | int | `1` | `-1` if the port transducer is mounted upside down; see [phase model](docs/protocol.md#phase-and-depression) |
+| `starboard_phase_sign` | int | `1` | The same for starboard |
 | `use_device_time` | bool | `true` | Stamp messages with the device ping counter |
 | `device_time_offset_sec` | double | `0.0` | Added to device time when stamping |
 | `reconnect_interval_sec` | double | `5.0` | Delay between reconnect attempts |
@@ -100,7 +102,7 @@ Defined in [`isss_ros2_driver/config/isss_driver.yaml`](isss_ros2_driver/config/
 
 See [`isss_msgs/msg/ISSS.msg`](isss_msgs/msg/ISSS.msg). Per ping: the packet header
 fields, the configuration in effect (range, sample interval, sound speed, and
-the phase-model K and β0), and per range bin and side the intensity, the signed
+the phase-model K, β0 and per-side phase sign), and per range bin and side the intensity, the signed
 phase counts, and the depression angle below the horizontal of `frame_id`
 (NaN where the model has no solution). Depression aliases for returns more than
 about 42° from the boresight, nadir included; see the protocol doc.

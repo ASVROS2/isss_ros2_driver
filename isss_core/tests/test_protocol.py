@@ -124,6 +124,15 @@ class TestPhaseModel:
         assert -10240 <= counts < 10240
         assert depression_from_counts(counts, self.K, self.BETA0) != pytest.approx(math.radians(90.0), abs=0.1)
 
+    @pytest.mark.parametrize("depression_deg", [5.0, 20.0, 60.0, 85.0])
+    def test_flipped_sign_mirrors_about_boresight(self, depression_deg):
+        """An upside-down transducer: the same counts land the other side of the boresight."""
+        beta = math.radians(depression_deg)
+        counts = counts_from_depression(beta, self.K, self.BETA0)
+        assert depression_from_counts(counts, self.K, self.BETA0, -1) == pytest.approx(2 * self.BETA0 - beta)
+        flipped = counts_from_depression(beta, self.K, self.BETA0, -1)
+        assert depression_from_counts(flipped, self.K, self.BETA0, -1) == pytest.approx(beta)
+
     def test_matches_sonar3d_reference_calibration(self):
         """Values sonar3d_reference's phase.depression_from_counts gives for its calibration."""
         assert math.degrees(depression_from_counts(0, self.K, self.BETA0)) == pytest.approx(44.5)

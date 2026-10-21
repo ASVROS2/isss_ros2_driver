@@ -79,6 +79,22 @@ def test_gaps_and_wrong_pacing_are_flagged():
     assert slow["ping interval"].status == "warn"
 
 
+def test_phase_sign_undoes_an_upside_down_transducer():
+    """A port transducer mounted upside down tilts its profile unless port_phase_sign is -1."""
+    bottom = 300
+    arrays = decode_packets([synthetic_packet(bottom_sample=bottom, phase_signs=(-1, 1))])
+    default, fixed = SonarConfig(), SonarConfig(port_phase_sign=-1)
+    altitude = arrays.slant_range(default)[bottom]
+    r = arrays.slant_range(default)
+    # Bins well inside the unambiguous sector on both sides of the boresight
+    near = (r > altitude * 1.05) & (r < altitude * 2.5)
+    beta_true = np.arcsin(altitude / r[near])
+    np.testing.assert_allclose(arrays.depression(fixed)[0, near, 0], beta_true, atol=1e-3)
+    np.testing.assert_allclose(arrays.depression(default)[0, near, 1], beta_true, atol=1e-3)
+    wrong = arrays.depression(default)[0, near, 0]
+    np.testing.assert_allclose(wrong, 2 * math.radians(44.5) - beta_true, atol=1e-3)
+
+
 def test_flat_bottom_is_flat_in_the_sensor_frame():
     config = SonarConfig()
     bottom = 300

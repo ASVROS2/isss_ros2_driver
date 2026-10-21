@@ -65,13 +65,15 @@ def synthetic_packet(
     bottom_sample: int | None = None,
     counts_per_unit_sine: float = 15218.0,
     boresight_depression_deg: float = 44.5,
+    phase_signs: tuple[int, int] = (1, 1),
 ) -> bytes:
     """Build one ping over a flat bottom: water column, then the seabed.
 
     Range is measured in samples, so a bin ``i`` beyond the first bottom return
     ``b`` sees the seabed at depression ``asin(b / i)``. Phase follows the
     interferometer model of ``isss.protocol``, so decoding a synthetic ping
-    recovers that geometry. Both sides see the same seabed.
+    recovers that geometry. Both sides see the same seabed. ``phase_signs``
+    (port, starboard) of -1 simulate a transducer mounted upside down.
     """
     bottom = bottom_sample if bottom_sample is not None else num_samples // 5
     beta0 = math.radians(boresight_depression_deg)
@@ -86,14 +88,16 @@ def synthetic_packet(
     payload = bytearray(num_samples * 6)
     for i in range(num_samples):
         if i < bottom:
-            rss, counts = 5, 0
+            rss, port, starboard = 5, 0, 0
         else:
             rss = int(200 * math.exp(-(i - bottom) / (num_samples / 4))) + 10
             depression = math.asin(bottom / max(i, 1))
-            counts = round(counts_from_depression(depression, counts_per_unit_sine, beta0))
-        phase = counts & 0xFFFF
+            port, starboard = (
+                round(counts_from_depression(depression, counts_per_unit_sine, beta0, sign)) & 0xFFFF
+                for sign in phase_signs
+            )
         payload[i * 6 : i * 6 + 6] = bytes(
-            [phase >> 8, phase & 0xFF, rss, phase >> 8, phase & 0xFF, rss]
+            [port >> 8, port & 0xFF, rss, starboard >> 8, starboard & 0xFF, rss]
         )
     return bytes(header) + bytes(payload)
 

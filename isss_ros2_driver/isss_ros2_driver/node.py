@@ -35,6 +35,8 @@ PARAMETERS = {
     'sound_velocity': 1440.9,
     'counts_per_unit_sine': 15218.0,
     'boresight_depression_deg': 44.5,
+    'port_phase_sign': 1,
+    'starboard_phase_sign': 1,
     'recv_timeout_sec': 2,
     'use_device_time': True,
     'device_time_offset_sec': 0.0,
@@ -64,6 +66,8 @@ class IsssDriverNode(Node):
             sound_velocity=p['sound_velocity'],
             counts_per_unit_sine=p['counts_per_unit_sine'],
             boresight_depression_deg=p['boresight_depression_deg'],
+            port_phase_sign=p['port_phase_sign'],
+            starboard_phase_sign=p['starboard_phase_sign'],
             recv_timeout_sec=float(p['recv_timeout_sec']),
             reconnect_interval_sec=p['reconnect_interval_sec'],
         )
@@ -105,6 +109,8 @@ class IsssDriverNode(Node):
         msg.sound_velocity = float(self._config.sound_velocity)
         msg.counts_per_unit_sine = float(self._config.counts_per_unit_sine)
         msg.boresight_depression = math.radians(self._config.boresight_depression_deg)
+        msg.port_phase_sign = self._config.port_phase_sign
+        msg.starboard_phase_sign = self._config.starboard_phase_sign
         # array.array skips rclpy's per-element range checks on 1000-sample arrays
         msg.port_intensity = array('B', samples.port_rss)
         msg.starboard_intensity = array('B', samples.starboard_rss)
@@ -200,6 +206,9 @@ def _validate(p: dict) -> None:
         raise ValueError("Parameter 'num_phases' must be >= 0")
     if not 0 < p['port'] <= 65535:
         raise ValueError("Parameter 'port' must be in [1, 65535]")
+    for name in ('port_phase_sign', 'starboard_phase_sign'):
+        if p[name] not in (1, -1):
+            raise ValueError(f"Parameter '{name}' must be 1 or -1")
 
 
 def main(args=None):
