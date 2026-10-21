@@ -1,7 +1,10 @@
 """The bench test passes on the simulator and catches a device that misbehaves."""
 
+import socket
+import threading
+
 from isss import SonarConfig
-from isss.bench import FAIL, INFO, Bench, frame, run_bench
+from isss.bench import FAIL, INFO, PASS, Bench, frame, run_bench
 from isss.sim import REG_NUM_SAMPLES, SimulatedSonar, synthetic_packet
 
 
@@ -48,3 +51,30 @@ def test_framing_infers_packet_size_without_being_told():
     assert p.spacing == 12 + 6 * 750 and p.num_samples == 750
     assert len(p.packets) == 6
     assert p.resyncs == 0
+
+
+def test_connect_retries_until_the_sonar_listens(tmp_path):
+    with socket.socket() as probe:  # a free port; nothing listens there yet, so connects are refused
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    bench = Bench(SonarConfig(ip="127.0.0.1", port=port), tmp_path,
+                  log=lambda _msg: None, connect_retry_sec=0.3)
+    sims = []
+    timer = threading.Timer(0.1, lambda: sims.append(SimulatedSonar(port=port).start()))
+    timer.start()
+    try:
+        result = bench.step_connect()
+    finally:
+        timer.join()
+        for sim in sims:
+            sim.stop()
+    assert result.status == PASS
+    assert result.data["attempts"] > 1 and result.data["errors"]
+    assert "first failure" in result.summary
+
+
+def test_simulator_starts_at_the_power_on_configuration(tmp_path):
+    with SimulatedSonar() as sim:
+        result = Bench(SonarConfig(ip="127.0.0.1", port=sim.port), tmp_path, scale=0.1,
+                       log=lambda _msg: None).step_stream_on_connect()
+    assert result.data["decimations"] == [165]

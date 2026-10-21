@@ -18,7 +18,7 @@ from typing import Any, Callable, Optional
 
 from isss.config import SonarConfig
 from isss.log import BinLogWriter
-from isss.protocol import Ping, compute_decimation, parse_packet
+from isss.protocol import Ping, compute_decimation, parse_header, parse_packet
 from isss.sonar import ISSSonar
 
 PingCallback = Callable[[Ping], None]
@@ -46,6 +46,7 @@ class DriverStatus:
     decimation: int
     logging: bool
     log_path: Optional[str]
+    dropped_pings: int = 0  # pings not at the written configuration (see SonarDriver._accept)
 
 
 class SonarDriver:
@@ -89,6 +90,10 @@ class SonarDriver:
         self._ping_window_start = time.monotonic()
         self._ping_rate_hz = 0.0
         self._last_register_writes: list[tuple[int, int]] = []
+        self._expected_decimation: int | None = None
+        self._settled = True  # a ping at the expected decimation arrived since the last setup
+        self._dropped_pings = 0
+        self._dropped_since_setup = 0
 
     # Lifecycle
 
@@ -153,6 +158,7 @@ class SonarDriver:
 
         if not self.is_connected:
             raise NotConnectedError("Sonar is not connected")
+        self._expect_configuration()
         try:
             self._note_setup(self._sonar.setup_sonar())
         except OSError as exc:
@@ -215,6 +221,7 @@ class SonarDriver:
                     if self._log_writer is not None and self._log_writer.is_open
                     else None
                 ),
+                dropped_pings=self._dropped_pings,
             )
 
     # Internals
@@ -233,6 +240,8 @@ class SonarDriver:
                 self._set_connected(False)
                 continue
 
+            if not self._accept(packet):
+                continue
             self._update_ping_rate()
             if self._log_writer is not None:
                 self._log_writer.write(packet)
@@ -259,6 +268,7 @@ class SonarDriver:
             )
             self._set_connected(False)
             return False
+        self._expect_configuration()
         try:
             self._note_setup(self._sonar.setup_sonar())
         except OSError as exc:
@@ -271,6 +281,44 @@ class SonarDriver:
         self._set_error("")
         self.log.info(f"Connected to sonar at {self.config.ip}:{self.config.port}")
         return True
+
+    def _expect_configuration(self) -> None:
+        """Call before writing the registers, so pings still in flight count as stale."""
+        with self._lock:
+            self._expected_decimation = compute_decimation(self.config.range_m, self.config.num_samples)
+            self._settled = False
+            self._dropped_since_setup = 0
+
+    def _accept(self, packet: bytes) -> bool:
+        """Whether a packet is at the configuration the driver wrote; others are dropped.
+
+        The sonar streams from the moment a client connects, at whatever it was set
+        to (decimation 165 after power-on), and pings in flight when the registers
+        change arrive after the write. Dropping them, rather than keeping them in
+        the .bin, keeps every reader simple: sidecar segments, the NetCDF export
+        and ``on_ping`` all assume the written configuration, and a stale ping at
+        another sample count is mis-framed by ``read_packet`` anyway. The header
+        only echoes the decimation, so a change of sample count that keeps it
+        (20 m at 1000 samples, 40 m at 2000) cannot be told apart.
+        """
+        decimation = parse_header(packet).decimation
+        with self._lock:
+            expected = self._expected_decimation
+            if expected is None or decimation == expected:
+                dropped, settled = self._dropped_since_setup, self._settled
+                self._settled = True
+                self._dropped_since_setup = 0
+            else:
+                self._dropped_pings += 1
+                self._dropped_since_setup += 1
+                settled = self._settled
+        if expected is None or decimation == expected:
+            if not settled and dropped:
+                self.log.info(f"Dropped {dropped} pings still at the previous configuration")
+            return True
+        if settled:  # the sonar changed under us: another client, or a reset we did not see
+            self._set_error(f"Sonar sends decimation {decimation}, expected {expected}; dropping its pings")
+        return False
 
     def _note_setup(self, writes: list[tuple[int, int]]) -> None:
         self._last_register_writes = writes

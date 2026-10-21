@@ -37,6 +37,8 @@ from isss.sonar import ISSSonar
 
 PASS, FAIL, INFO, SKIP = "pass", "fail", "info", "skip"
 PACING_TOLERANCE = 0.15  # relative, on the ping interval
+CONNECT_ATTEMPTS = 5
+CONNECT_TIMEOUT_SEC = 2.0
 
 
 @dataclass
@@ -183,8 +185,10 @@ class Bench:
         ranges: tuple[float, ...] = (10.0, 20.0, 40.0),
         samples: tuple[int, ...] = (500, 1000, 2000),
         log: Callable[[str], None] = print,
+        connect_retry_sec: float = 1.0,
     ) -> None:
         self.base = config
+        self.connect_retry_sec = connect_retry_sec
         self.out_dir = Path(out_dir)
         self.scale = scale
         self.ranges = ranges
@@ -246,12 +250,26 @@ class Bench:
     # Steps
 
     def step_connect(self) -> StepResult:
-        start = time.monotonic()
-        sonar = ISSSonar(self._config(recv_timeout_sec=0.5))
-        sonar.connect()
-        ms = (time.monotonic() - start) * 1e3
-        sonar.disconnect()
-        return StepResult("", PASS, f"TCP connect in {ms:.1f} ms", {"connect_ms": ms})
+        # The first connection has failed while ping worked; retry before giving up
+        errors: list[str] = []
+        for attempt in range(1, CONNECT_ATTEMPTS + 1):
+            start = time.monotonic()
+            sonar = ISSSonar(self._config(recv_timeout_sec=CONNECT_TIMEOUT_SEC))
+            try:
+                sonar.connect()
+            except OSError as exc:
+                errors.append(repr(exc))
+                if attempt < CONNECT_ATTEMPTS:
+                    time.sleep(self.connect_retry_sec)
+                continue
+            ms = (time.monotonic() - start) * 1e3
+            sonar.disconnect()
+            summary = f"TCP connect in {ms:.1f} ms"
+            if errors:
+                summary += f" on attempt {attempt}; first failure: {errors[0]}"
+            return StepResult("", PASS, summary, {"connect_ms": ms, "attempts": attempt, "errors": errors})
+        return StepResult("", FAIL, f"{CONNECT_ATTEMPTS} attempts failed, last: {errors[-1]}",
+                          {"attempts": CONNECT_ATTEMPTS, "errors": errors})
 
     def step_stream_on_connect(self) -> StepResult:
         sonar = self._sonar()

@@ -54,7 +54,7 @@ def test_viewer_flips_one_side():
     viewer._on_key(SimpleNamespace(key="1"))
     assert viewer.config.port_phase_sign == -1 and viewer.config.starboard_phase_sign == 1
     assert viewer.flip_boxes.get_status() == [True, False]
-    assert "port flipped" in viewer.ax_prof.get_title(loc="left")
+    assert "port flipped" in viewer.ax_prof.get_title()
     viewer.flip_boxes.set_active(1)  # clicking the starboard box
     assert viewer.config.starboard_phase_sign == -1
     viewer._on_key(SimpleNamespace(key="1"))
@@ -71,6 +71,19 @@ def test_viewer_angle_readout():
     viewer.flip(0)
     assert viewer.angles_at(-10.0, -1.0)["counts"] == pytest.approx(-shallow["counts"])
     assert viewer.angles_at(-0.1, -10.0)["aliased"]  # nadir
+
+
+def test_viewer_bearing_panel_reads_counts_on_the_right():
+    viewer = PingViewer(_arrays(), SonarConfig())
+    assert viewer.ax_phase.get_ylabel() == "depression [rad]"
+    [right] = viewer.ax_phase.child_axes
+    assert right.get_ylabel() == "raw phase counts"
+    # Zero counts sit at the boresight; the right axis inverts the phase model
+    to_counts = right._functions[0]
+    assert to_counts(math.radians(44.5)) == pytest.approx(0.0, abs=1e-6)
+    assert to_counts(math.radians(30.0)) > 0  # above the boresight: positive counts
+    viewer.flip(0)
+    assert viewer.ax_phase.child_axes[0].get_ylabel() == "raw phase counts (port: ×−1)"
 
 
 def test_live_viewer_follows_new_pings():

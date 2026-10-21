@@ -18,7 +18,8 @@ from isss.cli import main_export  # noqa: E402
 from isss.diagnostics import decode_packets, load_log  # noqa: E402
 from isss.netcdf import export_bag, export_bin, read_netcdf  # noqa: E402
 from isss.sidecar import read_sidecar  # noqa: E402
-from isss.sim import SimulatedSonar, synthetic_packet  # noqa: E402
+from isss.protocol import compute_decimation  # noqa: E402
+from isss.sim import REG_DECIMATION, SimulatedSonar, synthetic_packet  # noqa: E402
 
 LOG = Path(__file__).parent / "data" / "stick_2025-08-19_5pings.bin"
 
@@ -172,6 +173,7 @@ def _wait_for(predicate, timeout=3.0):
 
 def test_driver_exports_each_log_when_it_closes(tmp_path):
     with SimulatedSonar(rate_hz=100) as sim:
+        sim.registers[REG_DECIMATION] = compute_decimation(20.0, 1000)  # skip the power-on pings
         config = SonarConfig(ip="127.0.0.1", port=sim.port, recv_timeout_sec=1.0, reconnect_interval_sec=0.1)
         with SonarDriver(config, log_dir=tmp_path) as driver:
             first = Path(driver.status().log_path)

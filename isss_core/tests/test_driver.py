@@ -115,6 +115,7 @@ def test_starts_without_sonar_and_rejects_configure():
 
 def test_logs_raw_packets(tmp_path):
     with SimulatedSonar(rate_hz=50) as sim:
+        sim.registers[REG_DECIMATION] = compute_decimation(20.0, 1000)  # skip the power-on pings
         with SonarDriver(_config(sim.port), log_dir=tmp_path) as driver:
             assert _wait_for(lambda: driver.status().logging)
             path = Path(driver.status().log_path)

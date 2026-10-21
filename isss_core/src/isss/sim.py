@@ -4,9 +4,10 @@
 writes it receives, and streams packets: either replayed from a recorded
 ``.bin`` log, or synthetic pings whose size follows the ``0x11`` register.
 
-What it does *not* know about the real device: whether streaming starts on
-connect or only after configuration, how the device paces pings, and how it
-reacts to unknown registers. Those belong in hardware bench tests.
+Like the device (bench, Oct 2026) it streams on connect, starts at decimation
+165, keeps its registers across connections, and counts ping time from
+power-on (here: construction). It does not know how the device reacts to
+unknown registers, and it never refuses a first connection.
 """
 
 from __future__ import annotations
@@ -120,13 +121,16 @@ class SimulatedSonar:
         self.packets = list(packets) if packets else None
         self.host = host
         self.rate_hz = rate_hz
+        # The device's power-on configuration (observed: decimation 165, about 29.7 m);
+        # registers then persist across connections until the simulator stops
         self.registers: dict[int, int] = {
-            REG_DECIMATION: 111,
+            REG_DECIMATION: 165,
             REG_NUM_SAMPLES: DEFAULT_SAMPLES,
             REG_NUM_PHASES: 2,
         }
         self.register_writes: list[tuple[int, int]] = []
         self.pings_sent = 0
+        self._powered_on = time.monotonic()  # the device counter runs from power-on
 
         self._server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -225,9 +229,9 @@ class SimulatedSonar:
 
     def _stream(self, client: socket.socket) -> None:
         index = 0
-        # The device counter runs from power-on; start it at an arbitrary uptime and
-        # advance it with real time, so clock measurements against the host are honest.
-        t0 = time.monotonic() - 3600.0
+        # Advance the counter with real time, so clock measurements against the host are honest.
+        # Stamp the scheduled ping time, as the device stamps the ping, not the (jittery) send.
+        t0 = self._powered_on
         templates: dict[tuple[int, int], bytes] = {}
         next_send = time.monotonic()
         while not self._stop.is_set():
@@ -241,7 +245,7 @@ class SimulatedSonar:
                 key = (registers[REG_NUM_SAMPLES], registers[REG_DECIMATION])
                 if key not in templates:  # building a ping takes milliseconds; do it once per setting
                     templates[key] = synthetic_packet(num_samples=key[0], decimation=key[1])
-                stamp = int((time.monotonic() - t0) * 1e4) & 0xFFFFFFFF
+                stamp = int((next_send - t0) * 1e4) & 0xFFFFFFFF
                 packet = templates[key][:5] + stamp.to_bytes(4, "big") + templates[key][9:]
             try:
                 client.sendall(packet)

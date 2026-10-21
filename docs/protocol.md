@@ -17,6 +17,18 @@ the manufacturer reference and has not been checked independently.
 
 Configure the host with a static IP on the same subnet as the sonar.
 
+Observed on the bench (one unit, 21 Oct 2026, `docs/bench-testing.md`):
+
+- The sonar **streams as soon as a client connects**, before any register write,
+  and **stops pinging when the client disconnects**. There is no documented
+  start/stop register; the connection is the on/off switch.
+- After power-on it runs at decimation 165 and 1000 samples (about 29.7 m).
+  Its configuration is **kept across connections** but **reset by a power
+  cycle**, so a client must always write its registers.
+- The first TCP connection has failed twice while ping worked: once with "No
+  route to host", once timing out right after a power cycle. Retrying, or
+  waiting a minute after power-on, worked. Connect with retries.
+
 ## Register writes (documented)
 
 Each write is 4 bytes: `[0xFE, register, value_hi, value_lo]`.
@@ -28,8 +40,12 @@ Each write is 4 bytes: `[0xFE, register, value_hi, value_lo]`.
 | Num phases | `0x12` | Phase count (default 2; 0 = off) |
 
 The manufacturer reference has the `0x12` write commented out; the drivers send
-it. Channel registers at `0x20` / `0x30` appear in the reference but are not
-described and are not implemented.
+it. On the bench (in air), writing 0 or 2 made no visible difference to the
+phase bytes; whether it matters with echoes is untested. Channel registers at
+`0x20` / `0x30` appear in the reference but are not described and are not
+implemented. The reference computes them as a block for each
+channel (`0x20 + (channel << 4)`), so per-channel settings such as an enable or
+gain may live there; nothing documents a way to turn one channel off.
 
 ## Data packets
 
@@ -40,7 +56,7 @@ described and are not implemented.
 | 0–1 | `0xFE 0x05` | Start of packet |
 | 2–3 | "Packet size" | **Observed: always 6007**, also for 2000-sample pings (12012 bytes apart). Not a packet size; do not use it to frame packets. |
 | 4 | Type | `0xE1` = ISSS (the only type seen), `0xE2` = 8-bit sonar (not implemented) |
-| 5–8 | Ping time | Device counter in 100 µs units |
+| 5–8 | Ping time | Device counter in 100 µs units, from power-on (observed); wraps after ~4.97 days |
 | 9 | Frequency ID | `0x01` observed |
 | 10–11 | Decimation | Echoes register `0x10` (observed: 55, 83, 111, 222 for 10/15/20/40 m at 1000 samples) |
 
@@ -63,6 +79,10 @@ configured sample count; framing is by searching for the header pattern
 Pings arrive once per two-way travel time for the configured range, at roughly
 1500 m/s: 13.4 ms at 10 m, 20.1 ms at 15 m, 26.8 ms at 20 m, 53.5 ms at 40 m.
 `isss.sim.SimulatedSonar` paces pings the same way by default.
+
+On the bench the device counter ran 22 ppm slow against the host over 20 s,
+with 1.9 ms p95 arrival jitter. That is too short a window to pin the drift
+down; measure it over minutes before relying on `use_device_time`.
 
 ## Log files
 
@@ -152,11 +172,11 @@ clamping almost every bearing to ±90°. Their "phase difference" in radians was
 
 ## Open questions
 
-1. **Header bytes 2–3.** Constant 6007; meaning unknown.
-2. **Ping time.** 32-bit counter of 100 µs wraps after ~4.97 days; its epoch
-   (device boot?) is unknown, which matters for `use_device_time`.
-3. **Does streaming start on connect** or only after configuration? Unknown;
-   the simulator streams on connect.
+1. **Header bytes 2–3.** Constant 6007 at 500, 1000 and 2000 samples; meaning unknown.
+2. **Clock drift** of the ping counter against real time, measured over
+   minutes rather than seconds (see Timing).
+3. **Why the first connection sometimes fails** while ping works (see
+   Connection).
 4. **Range zero offset and sound speed** were fitted together with a vertical
    offset in the mesh check and trade off; neither is pinned down independently.
 5. **The July 2024 configuration**: what the switched settings were, and

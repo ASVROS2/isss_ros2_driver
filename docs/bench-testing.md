@@ -11,9 +11,11 @@ the device clock, and our driver and logging. `isss-bench` does that.
   bench takes about two minutes, `--quick` about thirty seconds.
 - Give the host a static IP on the sonar's subnet (default sonar address
   `192.168.2.62`, TCP port 57349) and check `ping 192.168.2.62`.
-- Note the time the sonar was powered on. The clock step reports the device
-  counter, and comparing it with the uptime tells us whether the counter starts
-  at power-on (open question 2 in [protocol.md](protocol.md)).
+- Wait about a minute after power-on before running the bench. Ping can work
+  before TCP connections do; the connect step retries for about 15 s and
+  reports how many attempts it needed.
+- The clock step reports the device counter, which counts from power-on, so it
+  doubles as the sonar's uptime.
 
 ## Run it
 
@@ -46,7 +48,7 @@ disturb the bench.
 
 | Step | Checks | Pass when |
 |---|---|---|
-| connect | TCP connection | it connects |
+| connect | TCP connection, up to 5 attempts | it connects; the report lists failed attempts |
 | stream on connect | does data arrive before any register write; framed without assuming a sample count (from header spacing) | info |
 | baseline configuration | 20 m / 1000 samples: packet size, decimation echoed in the header, ping interval, framing | size 6012, decimation 111, interval within 15 % of 26.7 ms, no framing errors |
 | range sweep | the same at 10, 20, 40 m; fits interval against range | every range as expected; the fit gives the pacing sound speed (logs say ~1500 m/s) |

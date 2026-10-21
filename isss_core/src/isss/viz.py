@@ -87,7 +87,7 @@ def draw_intensity_waterfall(ax, arrays: PingArrays, config: SonarConfig, *, per
     vmax = float(np.percentile(image, percentile)) if image.size else 1.0
     im = ax.imshow(image, aspect="auto", cmap="gray", vmin=0, vmax=max(vmax, 1.0),
                    extent=_waterfall_extent(arrays, config), interpolation="nearest")
-    _waterfall_axes(ax, "Intensity")
+    _waterfall_axes(ax, "Intensity waterfall")
     return im
 
 
@@ -95,12 +95,12 @@ def draw_phase_waterfall(ax, arrays: PingArrays, config: SonarConfig):
     im = ax.imshow(_mirrored(arrays.counts.astype(np.float32)), aspect="auto", cmap=PHASE_CMAP,
                    vmin=-HALF_CYCLE, vmax=HALF_CYCLE, extent=_waterfall_extent(arrays, config),
                    interpolation="nearest")
-    _waterfall_axes(ax, "Phase counts (one cycle)")
+    _waterfall_axes(ax, "Phase waterfall (counts, one cycle)")
     return im
 
 
 def _waterfall_axes(ax, title: str) -> None:
-    ax.set_title(title, loc="left")
+    ax.set_title(title)
     ax.set_xlabel("slant range [m]   ← port | starboard →")
     ax.set_ylabel("ping")
     ax.axvline(0, color=TEXT_SECONDARY, linewidth=0.6)
@@ -120,7 +120,7 @@ def draw_timing(ax, arrays: PingArrays) -> None:
     ax.axhline(expected_ms, color=TEXT_SECONDARY, linestyle="--", linewidth=1.0)
     ax.annotate(f"expected {expected_ms:.1f} ms", (1, expected_ms), xytext=(4, 4),
                 textcoords="offset points", color=TEXT_SECONDARY, fontsize=8)
-    ax.set_title("Ping interval", loc="left")
+    ax.set_title("Ping interval")
     ax.set_xlabel("ping")
     ax.set_ylabel("ms")
     ax.set_ylim(0, max(float(dt_ms.max()), expected_ms) * 1.15)
@@ -137,7 +137,7 @@ def draw_phase_histograms(axes, arrays: PingArrays, *, min_excess: float = 25.0)
         for x in (-HALF_CYCLE, HALF_CYCLE):
             ax.axvline(x, color=GRID, linewidth=1.0)
         ax.set_yscale("log")
-        ax.set_title(f"{name.capitalize()} phase distribution", loc="left")
+        ax.set_title(f"{name.capitalize()} phase distribution")
         ax.set_xlabel("phase counts (lines: ±10240, one cycle)")
         ax.set_ylabel("samples")
         ax.legend(loc="upper right")
@@ -157,7 +157,7 @@ def draw_phase_vs_range(axes, arrays: PingArrays, config: SonarConfig, *, min_ex
                   extent=[xe[0], xe[-1], ye[0], ye[-1]], interpolation="nearest")
         for y in (-HALF_CYCLE, HALF_CYCLE):
             ax.axhline(y, color=TEXT_SECONDARY, linewidth=0.6, linestyle=":")
-        ax.set_title(f"{name.capitalize()}: phase of strong returns vs range", loc="left")
+        ax.set_title(f"{name.capitalize()}: phase of strong returns vs range")
         ax.set_xlabel("slant range [m]")
         ax.set_ylabel("phase counts")
 
@@ -207,7 +207,7 @@ def _profile_axes(ax, reach: float, title: str) -> None:
     ax.set_xlim(-reach, reach)
     ax.set_ylim(-reach, 0.05 * reach)
     ax.set_aspect("equal")
-    ax.set_title(title, loc="left")
+    ax.set_title(title)
     ax.set_xlabel("across-track [m]   ← port | starboard →")
     ax.set_ylabel("height [m]")
     ax.text(0.99, 0.02, "dashed: boresight; dotted: ±42° unambiguous sector",
@@ -279,7 +279,7 @@ class PingViewer:
             self.fig = plt.figure(figsize=(14, 8))
             gs = self.fig.add_gridspec(3, 2, width_ratios=[1.0, 1.25], height_ratios=[1.0, 1.0, 1.6],
                                        hspace=0.55, wspace=0.18,
-                                       left=0.06, right=0.98, top=0.92, bottom=0.12)
+                                       left=0.06, right=0.93, top=0.92, bottom=0.12)
             self.ax_wf = self.fig.add_subplot(gs[:, 0])
             self.ax_int = self.fig.add_subplot(gs[0, 1])
             self.ax_phase = self.fig.add_subplot(gs[1, 1], sharex=self.ax_int)
@@ -336,26 +336,21 @@ class PingViewer:
             one = a.select(slice(i, i + 1))
             strong = strong_mask(one)[0]
             bottom = detect_bottom(one)[0]
+            depression = one.depression(self.config)[0]
             for side, name in enumerate(SIDES):
                 color = SIDE_COLORS[side]
                 self.ax_int.plot(r, a.intensity[i, :, side], color=color, label=name)
-                self.ax_phase.scatter(r, a.counts[i, :, side], s=4, color=color, alpha=0.35, linewidths=0)
-                self.ax_phase.scatter(r[strong[:, side]], a.counts[i, strong[:, side], side], s=9,
+                self.ax_phase.scatter(r, depression[:, side], s=4, color=color, alpha=0.35, linewidths=0)
+                self.ax_phase.scatter(r[strong[:, side]], depression[strong[:, side], side], s=9,
                                       color=color, linewidths=0, label=f"{name}, strong")
                 if bottom[side] >= 0:
                     self.ax_int.axvline(r[bottom[side]], color=color, linewidth=0.8, linestyle=":")
-            self.ax_int.set_title("Intensity (dotted: first sustained return)", loc="left")
+            self.ax_int.set_title("Intensity (dotted: first sustained return)")
             self.ax_int.set_ylabel("RSS")
             self.ax_int.set_ylim(0, 260)
             self.ax_int.legend(loc="upper right", ncols=2)
             _grid(self.ax_int)
-            self.ax_phase.set_title("Phase counts (faint: weak samples)", loc="left")
-            self.ax_phase.set_xlabel("slant range [m]")
-            self.ax_phase.set_ylabel("counts")
-            self.ax_phase.set_ylim(-32768, 32768)
-            for y in (-HALF_CYCLE, HALF_CYCLE):
-                self.ax_phase.axhline(y, color=GRID, linewidth=1.0)
-            _grid(self.ax_phase)
+            self._draw_bearing_axes()
 
             pts = sensor_frame_points(one, self.config)
             reach = float(r[-1]) if r.size else 1.0
@@ -369,7 +364,7 @@ class PingViewer:
             t = a.ping_time[i] * 1e-4
             self.fig.suptitle(f"{self.title}   ping {i + 1}/{a.n_pings}   device time {t:.3f} s"
                               f"{'   [following]' if self.follow and self.live else ''}",
-                              x=0.06, ha="left", color=TEXT, fontsize=12)
+                              color=TEXT, fontsize=12)
             if hasattr(self, "_marker"):
                 self._marker.set_ydata([i, i])
         if int(self.slider.val) != i:
@@ -377,6 +372,37 @@ class PingViewer:
             self.slider.set_val(i)
             self.slider.eventson = True
         self.fig.canvas.draw_idle()
+
+    def _draw_bearing_axes(self) -> None:
+        """Depression [rad] on the left; the right axis reads the same points as raw counts.
+
+        The right axis inverts the phase model, so it is exact for one phase
+        sign. With the two sides' signs different it follows starboard, and the
+        port counts are the negated reading (the label says so).
+        """
+        ax, cfg = self.ax_phase, self.config
+        beta0 = math.radians(cfg.boresight_depression_deg)
+        k, sign = cfg.counts_per_unit_sine, cfg.starboard_phase_sign
+        half = math.asin(min(1.0, HALF_CYCLE / k))
+
+        def to_counts(beta):
+            return sign * k * np.sin(beta0 - np.asarray(beta, dtype=float))
+
+        def to_depression(counts):
+            return beta0 - np.arcsin(np.clip(sign * np.asarray(counts, dtype=float) / k, -1.0, 1.0))
+
+        ax.set_title("Bearing and raw phase (faint: weak samples)")
+        ax.set_xlabel("slant range [m]")
+        ax.set_ylabel("depression [rad]")
+        ax.set_ylim(math.pi / 2, 0.0)  # nadir down, as in the profile
+        ax.axhline(beta0, color=TEXT_SECONDARY, linewidth=0.8, linestyle="--")
+        for beta in (beta0 - half, beta0 + half):  # the ±10240 cycle edges
+            ax.axhline(beta, color=TEXT_SECONDARY, linewidth=0.8, linestyle=":")
+        _grid(ax)
+        right = ax.secondary_yaxis("right", functions=(to_counts, to_depression))
+        right.set_ticks([-HALF_CYCLE, -5000, 0, 5000, HALF_CYCLE])
+        flipped = cfg.port_phase_sign != cfg.starboard_phase_sign
+        right.set_ylabel("raw phase counts" + (" (port: ×−1)" if flipped else ""))
 
     # Phase sign
 
