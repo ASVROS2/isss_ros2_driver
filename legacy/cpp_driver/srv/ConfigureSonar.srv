@@ -1,0 +1,6 @@
+float64 range
+int32 num_samples
+int32 num_phases
+---
+bool success
+string message

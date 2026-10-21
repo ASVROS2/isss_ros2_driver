@@ -11,6 +11,7 @@ sensor can be developed and bench-tested without ROS:
 | [`docs/protocol.md`](docs/protocol.md) | The protocol, log files, the phase-to-depression model, what has been checked against data, and open questions | |
 | [`docs/bench-testing.md`](docs/bench-testing.md) | How to bench-test a sonar with `isss-bench`, and what to check by hand | |
 | `isss_data/` | Three raw logs from the stick (Aug 2025) | |
+| [`legacy/`](legacy) | The previous C++ driver, kept for reference; not built | |
 
 All sensor behaviour lives in `isss_core`; the ROS node only translates. A change
 to how the sonar is handled goes in `isss_core` with a test, and the node picks it
@@ -111,7 +112,8 @@ about 42° from the boresight, nadir included; see the protocol doc.
 
 ## Migrating from the C++ driver (≤ 0.1.0)
 
-Topic names, services and the `.bin` log format are unchanged. What differs:
+The C++ source is kept in [`legacy/cpp_driver/`](legacy/cpp_driver) and under the tag
+`cpp-driver-0.1.0`. Topic names, services and the `.bin` log format are unchanged. What differs:
 
 - `isss/raw` publishes `isss_msgs/ISSS` instead of `smarc_msgs/ISSS`, so the
   driver no longer needs `smarc_msgs`. Field changes: `port_channel` →
