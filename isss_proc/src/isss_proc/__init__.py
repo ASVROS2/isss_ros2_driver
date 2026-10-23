@@ -11,7 +11,7 @@ from isss_proc.filters import (
     default_stages,
     estimate_leak,
 )
-from isss_proc.pipeline import Pipeline, Result, Stream, viewer_keep
+from isss_proc.pipeline import Pipeline, Result, Stream, make_pipeline, viewer_keep
 from isss_proc.swath import Swath
 
 __all__ = [
@@ -28,6 +28,7 @@ __all__ = [
     "clean_intensity",
     "default_stages",
     "estimate_leak",
+    "make_pipeline",
     "viewer_keep",
 ]
 

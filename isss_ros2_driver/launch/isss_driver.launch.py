@@ -28,7 +28,7 @@ def launch_setup(context, *args, **kwargs):
     if overrides:
         params.append(overrides)
 
-    return [
+    nodes = [
         Node(
             package='isss_ros2_driver',
             executable='isss_ros2_driver_node',
@@ -38,6 +38,18 @@ def launch_setup(context, *args, **kwargs):
             parameters=params,
         ),
     ]
+    if LaunchConfiguration('cloud').perform(context).lower() in ('true', '1'):
+        cloud_config = (LaunchConfiguration('cloud_config_file').perform(context)
+                        or os.path.join(pkg_share, 'config', 'isss_cloud.yaml'))
+        nodes.append(Node(
+            package='isss_ros2_driver',
+            executable='isss_cloud_node',
+            name='isss_cloud_node',
+            namespace=LaunchConfiguration('namespace'),
+            output='screen',
+            parameters=[cloud_config],
+        ))
+    return nodes
 
 
 def generate_launch_description():
@@ -65,5 +77,13 @@ def generate_launch_description():
             'save_path',
             default_value='',
             description='Optional directory for binary logs (empty = use YAML value)'),
+        DeclareLaunchArgument(
+            'cloud',
+            default_value='false',
+            description='Also start isss_cloud_node: filtered point clouds on isss/cloud'),
+        DeclareLaunchArgument(
+            'cloud_config_file',
+            default_value=os.path.join(pkg_share, 'config', 'isss_cloud.yaml'),
+            description='Full path to the processing node parameter YAML file'),
         OpaqueFunction(function=launch_setup),
     ])

@@ -16,12 +16,13 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    description='ROS 2 driver for the DeepVision ISSS (thin wrapper around isss_core)',
+    description='ROS 2 driver and processing node for the DeepVision ISSS (thin wrappers around isss_core and isss_proc)',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'isss_ros2_driver_node = isss_ros2_driver.node:main',
+            'isss_cloud_node = isss_ros2_driver.cloud_node:main',
         ],
     },
 )

@@ -1,0 +1,12 @@
+isss_cloud_node:
+  ros__parameters:
+    block: 5                    # pings processed at a time (~50 ms per 200-ping window)
+    context: 200                # pings of history each block is processed with
+    min_range: 1.0              # [m] drop transmit ring-down
+    max_range: 0.0              # [m] 0: no limit
+    min_excess: 30.0            # intensity above the water column; 0 disables the stage
+    bias_states: true
+    first_surface: true
+    mpaa: false                 # most-probable-angle filter at the end of the chain
+    mpaa_pings: 1
+    mpaa_band: 3.0              # [deg]
