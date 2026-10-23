@@ -6,6 +6,7 @@ sensor can be developed and bench-tested without ROS:
 | Directory | What | Build |
 |---|---|---|
 | [`isss_core/`](isss_core) | Python package `isss`: protocol, TCP client, driver loop (reconnect, logging, statistics), log reader, simulator, diagnostic report and viewer, command-line tools. **No ROS dependency.** | `uv` on any machine; also a colcon `ament_python` package |
+| [`isss_proc/`](isss_proc) | Python package `isss_proc`: processing. Filter stages (intensity, phase bias states, first surface, MPAA) over a log or live pings, `isss-proc`, `isss-proc-view`. **No ROS dependency.** Structure and plan: [`docs/processing.md`](docs/processing.md) | `uv`; also colcon `ament_python` |
 | [`isss_ros2_driver/`](isss_ros2_driver) | Thin rclpy node around `isss.SonarDriver`: parameters, `isss_msgs/ISSS`, status, services | colcon |
 | [`isss_msgs/`](isss_msgs) | `ISSS.msg` (one ping), `ISSSStatus.msg`, `ConfigureSonar.srv` | colcon |
 | [`docs/protocol.md`](docs/protocol.md) | The protocol, log files, the phase-to-depression model, what has been checked against data, and open questions | |
@@ -29,6 +30,9 @@ uv run isss-report ../isss_data/1755610748.553636.bin   # figures + health check
 uv run isss-view ../isss_data/1755610748.553636.bin     # interactive; or --ip for a live sonar
 uv run isss-export ../isss_data/1755610748.553636.bin   # NetCDF4 for analysis, see docs/netcdf-format.md
 uv run isss-bench --ip 192.168.2.62                     # bench test of a connected sonar, see docs/bench-testing.md
+
+cd ../isss_proc && uv sync
+uv run isss-proc-view ../isss_data/1755610748.553636.bin  # the viewer with the processing filters (or --ip)
 ```
 
 See [`isss_core/README.md`](isss_core/README.md) for the Python API.

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "isss-proc"
+version = "0.1.0"
+description = "Processing of DeepVision ISSS pings: filters from phase and intensity to trusted soundings"
+readme = "README.md"
+license = {text = "MIT"}  # table form: older setuptools (colcon builds) rejects the string form
+requires-python = ">=3.9"
+authors = [{ name = "KTH SMaRC" }, { name = "Julian Valdez", email = "jvaldez@kth.se" }]
+keywords = ["sonar", "sidescan", "deepvision", "isss", "interferometry", "bathymetry"]
+dependencies = [
+    "isss-core[viz]",
+    "numpy>=1.20",
+    "scipy>=1.7",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "isss-core[export]",
+    "xarray>=2024.7.0",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.sources]
+isss-core = { path = "../isss_core", editable = true }
+
+[project.scripts]
+isss-proc = "isss_proc.cli:main_process"
+isss-proc-view = "isss_proc.cli:main_view"
+isss-proc-crosstalk = "isss_proc.cli:main_crosstalk"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/isss_proc"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

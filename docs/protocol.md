@@ -63,8 +63,8 @@ gain may live there; nothing documents a way to turn one channel off.
 **Payload: `num_samples` × 6 bytes**
 
 Per sample: port phase `[15:8]`, port phase `[7:0]`, port RSS, starboard phase
-`[15:8]`, starboard phase `[7:0]`, starboard RSS. Phase is a signed 16-bit value
-(values above 32768 wrap negative).
+`[15:8]`, starboard phase `[7:0]`, starboard RSS. Phase is a signed 16-bit
+two's-complement value (32768 and above wrap negative).
 
 Sample spacing is `decimation × 3 / 12.5 MHz` (26.6 µs at decimation 111), so
 the slant range of bin `i` is about `i × spacing × c / 2`. The zero offset of
@@ -99,7 +99,9 @@ raw socket dumps from the manufacturer reader and start mid-packet.
 `SonarDriver` leaves out of its logs, and does not hand on, pings whose header
 decimation is not the one it wrote: those still at the previous configuration
 after connecting or reconfiguring. `DriverStatus.dropped_pings`
-counts them.
+counts them. If it is still dropping them 3 s after a register write, the
+sonar did not take the setting, and `last_error` says so until pings at the
+written decimation arrive.
 
 ## Phase and depression
 
@@ -174,6 +176,18 @@ clamping almost every bearing to ±90°. Their "phase difference" in radians was
   exactly (`isss/bag.py`). The bags miss about 40% of pings (gaps in the device
   counter of 12_18_12: 20920 kept, about 13200 missing, longest gap 0.9 s).
   Whether the sonar, the old driver or the recorder dropped them is not known.
+  **Cross talk (Oct 2026): none confirmed at the same ping and bin.**
+  - Port's arcs and blocks that look like starboard's are not copies. The
+    along-track residuals correlate at 0.05 at zero lag, and no offset in ping
+    or range does better. They are probably the symmetric dock.
+  - Under a saturated starboard object closer than the floor, port stays at
+    its water column.
+  - At the floor range both sides return: port's first bottom return is about
+    29 counts below starboard's, with phase near the ±10240 wrap (nadir
+    aliasing). A first look took this for a leak.
+  - Saturated starboard samples (200 or more) stick near −5120 counts (a
+    quarter cycle) in 17–29 % of cases.
+  - Status of `CrossTalk` in `isss_proc`: [processing.md](processing.md).
 
 ## Open questions
 
