@@ -1,0 +1,61 @@
+{
+  "format": "isss-bin-sidecar",
+  "version": 1,
+  "bin": "1792614189.215201.bin",
+  "writer": {
+    "package": "isss-core",
+    "version": "0.2.0"
+  },
+  "sonar": {
+    "ip": "192.168.2.62",
+    "port": 57349
+  },
+  "calibration": {
+    "sound_velocity": 1440.9,
+    "counts_per_unit_sine": 15218.0,
+    "boresight_depression_deg": 44.5,
+    "port_phase_sign": 1,
+    "starboard_phase_sign": 1
+  },
+  "segments": [
+    {
+      "byte_offset": 0,
+      "utc": "2026-10-21T20:23:09.215746+00:00",
+      "range_m": 20.0,
+      "num_samples": 1000,
+      "num_phases": 2,
+      "decimation": 111
+    }
+  ],
+  "register_writes": [
+    {
+      "utc": "2026-10-21T20:23:09.215902+00:00",
+      "register": 16,
+      "value": 111
+    },
+    {
+      "utc": "2026-10-21T20:23:09.215902+00:00",
+      "register": 17,
+      "value": 1000
+    },
+    {
+      "utc": "2026-10-21T20:23:09.215902+00:00",
+      "register": 18,
+      "value": 2
+    }
+  ],
+  "first_packet": {
+    "utc": "2026-10-21T20:23:09.244990+00:00",
+    "unix": 1792614189.245027,
+    "ping_time": 5022286
+  },
+  "last_packet": {
+    "utc": "2026-10-21T20:23:14.221492+00:00",
+    "unix": 1792614194.2215428,
+    "ping_time": 5072045
+  },
+  "packets": 186,
+  "bytes": 1118232,
+  "opened_utc": "2026-10-21T20:23:09.215915+00:00",
+  "closed_utc": "2026-10-21T20:23:14.246833+00:00"
+}

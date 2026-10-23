@@ -122,6 +122,8 @@ The profile marks which edge of each sector positive and negative counts map to.
 Hovering it reads out the depression, the off-boresight angle and the counts
 expected there. All tools take `--k`, `--boresight`, `--flip-port`,
 `--flip-starboard` and `--sound-velocity` to try another calibration.
+`PingViewer` takes a `keep` mask function and a `trail`; `isss-proc-view` in
+[`../isss_proc`](../isss_proc) uses them to show what its filters keep.
 
 ### Run the driver loop
 
@@ -171,6 +173,7 @@ src/isss/
   log.py        Binary log reading and writing
   sidecar.py    The JSON sidecar next to each log
   netcdf.py     NetCDF4 export (isss-export) and reading it back
+  sources.py    load_pings: PingArrays from a .bin, .nc or old-driver bag (the one entry for readers)
   bag.py        Raw packets from rosbag2 bags of the old C++ driver
   bench.py      isss-bench
   sim.py        SimulatedSonar and the isss-sim command

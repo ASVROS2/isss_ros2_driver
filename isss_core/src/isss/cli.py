@@ -50,7 +50,8 @@ def _viz_imports():
         sys.exit(1)
 
 
-def _calibration_args(parser: argparse.ArgumentParser) -> None:
+def calibration_args(parser: argparse.ArgumentParser) -> None:
+    """Options for reading logs and for the phase model; ``config_from`` turns them into a ``SonarConfig``."""
     from isss.config import SonarConfig
 
     d = SonarConfig()
@@ -71,7 +72,7 @@ def d_samples() -> int:
     return SonarConfig().num_samples
 
 
-def _config_from(args: argparse.Namespace, **extra):
+def config_from(args: argparse.Namespace, **extra):
     from isss.config import SonarConfig
 
     return SonarConfig(num_samples=args.samples or d_samples(), sound_velocity=args.sound_velocity,
@@ -80,25 +81,11 @@ def _config_from(args: argparse.Namespace, **extra):
                        starboard_phase_sign=-1 if args.flip_starboard else 1, **extra)
 
 
-def _load_arrays(path: Path, args: argparse.Namespace):
-    """Pings of a .bin log, an exported .nc, or a rosbag2 bag of the old driver."""
-    from collections import Counter
+def load_arrays(path: Path, args: argparse.Namespace):
+    """Pings of a .bin log, an exported .nc, or a rosbag2 bag of the old driver (``isss.sources``)."""
+    from isss.sources import load_pings
 
-    from isss import netcdf
-    from isss.diagnostics import decode_packets, load_log
-
-    if path.suffix == ".nc":
-        try:
-            return netcdf.read_netcdf(path)
-        except ImportError:
-            raise ValueError("reading .nc files needs the export extra: uv sync --extra export")
-    if netcdf.is_bag(path):
-        packets = [p for _, p in netcdf.bag_packets(path, getattr(args, "topic", None))]
-        if not packets:
-            raise ValueError(f"{path} has no ISSS pings")
-        size = Counter(len(p) for p in packets).most_common(1)[0][0]
-        return decode_packets([p for p in packets if len(p) == size], (size - 12) // 6)
-    return load_log(path, num_samples=args.samples, segment=args.segment)
+    return load_pings(path, num_samples=args.samples, segment=args.segment, topic=getattr(args, "topic", None))
 
 
 def main_export(argv: list[str] | None = None) -> None:
@@ -111,7 +98,7 @@ def main_export(argv: list[str] | None = None) -> None:
     parser.add_argument("-o", "--out", type=Path, default=None,
                         help="Output .nc (one input) or directory (default: next to each input)")
     parser.add_argument("--topic", default=None, help="ISSS topic in a bag (default: the only smarc_msgs/ISSS one)")
-    _calibration_args(parser)
+    calibration_args(parser)
     args = parser.parse_args(argv)
     try:
         from isss import netcdf
@@ -119,7 +106,7 @@ def main_export(argv: list[str] | None = None) -> None:
         print("isss-export needs the export extra (h5netcdf, h5py, numpy): uv sync --extra export", file=sys.stderr)
         sys.exit(1)
 
-    config = _config_from(args)
+    config = config_from(args)
     failed = False
     for path in args.inputs:
         out = args.out
@@ -158,12 +145,12 @@ def main_report(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Diagnostic report for an ISSS .bin log")
     parser.add_argument("file", type=Path, help=".bin log, exported .nc, or rosbag2 bag of the old driver")
     parser.add_argument("-o", "--out", type=Path, help="Output directory (default: <log>_report/)")
-    _calibration_args(parser)
+    calibration_args(parser)
     args = parser.parse_args(argv)
 
-    config = _config_from(args)
+    config = config_from(args)
     try:
-        arrays = _load_arrays(args.file, args)
+        arrays = load_arrays(args.file, args)
     except ValueError as exc:
         print(exc, file=sys.stderr)
         sys.exit(1)
@@ -208,21 +195,33 @@ def _report_markdown(log: Path, report) -> str:
             f"{rows}\n\n{figures}\n")
 
 
-def main_view(argv: list[str] | None = None) -> None:
-    """Interactive viewer for a .bin log, or a live sonar (``--ip``)."""
-    _viz_imports()
-    parser = argparse.ArgumentParser(
-        description="View an ISSS log or a live sonar. Click the waterfall or use the slider to pick a ping; "
-        "arrow keys step, p toggles phase, f follows the newest ping (live), "
-        "1/2 flip the port/starboard angle (an upside-down transducer).")
+def view_args(parser: argparse.ArgumentParser) -> None:
+    """The viewer's source options: a file, or ``--ip`` for a live sonar."""
     parser.add_argument("file", nargs="?", type=Path,
                         help=".bin log, exported .nc, or rosbag2 bag of the old driver")
     parser.add_argument("--ip", help="Connect to a sonar (or isss-sim) instead of reading a file")
     parser.add_argument("--port", type=int, default=57349)
     parser.add_argument("--range", type=float, default=20.0, dest="range_m", help="Range to configure (live)")
     parser.add_argument("--keep", type=int, default=600, help="Pings to keep in the live waterfall")
-    _calibration_args(parser)
-    args = parser.parse_args(argv)
+    calibration_args(parser)
+
+
+def main_view(argv: list[str] | None = None) -> None:
+    """Interactive viewer for a .bin log, or a live sonar (``--ip``)."""
+    parser = argparse.ArgumentParser(
+        description="View an ISSS log or a live sonar. Click the waterfall or use the slider to pick a ping; "
+        "arrow keys step, p toggles phase, f follows the newest ping (live), "
+        "1/2 flip the port/starboard angle (an upside-down transducer).")
+    view_args(parser)
+    run_viewer(parser, parser.parse_args(argv))
+
+
+def run_viewer(parser: argparse.ArgumentParser, args: argparse.Namespace, **viewer_kwargs) -> None:
+    """Open ``PingViewer`` on the file or live sonar in ``args`` (from ``view_args``).
+
+    ``viewer_kwargs`` go to ``PingViewer``: ``isss_proc`` passes its filters as ``keep``.
+    """
+    _viz_imports()
     if (args.file is None) == (args.ip is None):
         parser.error("give either a log file or --ip")
 
@@ -231,22 +230,22 @@ def main_view(argv: list[str] | None = None) -> None:
     from isss.viz import PingViewer
 
     if args.file is not None:
-        config = _config_from(args)
+        config = config_from(args)
         try:
-            arrays = _load_arrays(args.file, args)
+            arrays = load_arrays(args.file, args)
         except ValueError as exc:
             parser.error(str(exc))
-        viewer = PingViewer(arrays, config, title=args.file.name)
+        viewer = PingViewer(arrays, config, title=args.file.name, **viewer_kwargs)
         plt.show()
         return
 
     from isss.diagnostics import PacketBuffer
     from isss.driver import SonarDriver
 
-    config = _config_from(args, ip=args.ip, port=args.port, range_m=args.range_m)
+    config = config_from(args, ip=args.ip, port=args.port, range_m=args.range_m)
     buffer = PacketBuffer(args.keep)
     driver = SonarDriver(config, lambda ping: buffer.add(ping.raw))
-    viewer = PingViewer(buffer.arrays(), config, title=f"{args.ip}:{args.port}", live=True)
+    viewer = PingViewer(buffer.arrays(), config, title=f"{args.ip}:{args.port}", live=True, **viewer_kwargs)
 
     def refresh() -> None:
         if len(buffer):

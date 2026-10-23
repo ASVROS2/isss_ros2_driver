@@ -16,7 +16,7 @@ from rclpy.time import Time
 from std_srvs.srv import Trigger
 
 from isss import NotConnectedError, Ping, SonarConfig, SonarDriver
-from isss.protocol import sample_interval
+from isss.protocol import check_settings, sample_interval
 from isss_msgs.msg import ISSS, ISSSStatus
 from isss_msgs.srv import ConfigureSonar
 
@@ -147,8 +147,13 @@ class IsssDriverNode(Node):
         diag = DiagnosticStatus()
         diag.name = 'isss_ros2_driver'
         diag.hardware_id = self._config.ip
-        diag.level = DiagnosticStatus.OK if state.connected else DiagnosticStatus.ERROR
-        diag.message = 'Streaming' if state.connected else state.last_error
+        # Connected with an error: streaming, but dropping pings or not logging.
+        if not state.connected:
+            diag.level, diag.message = DiagnosticStatus.ERROR, state.last_error
+        elif state.last_error:
+            diag.level, diag.message = DiagnosticStatus.WARN, state.last_error
+        else:
+            diag.level, diag.message = DiagnosticStatus.OK, 'Streaming'
         diag.values = [
             KeyValue(key='ping_rate_hz', value=f'{state.ping_rate_hz:.2f}'),
             KeyValue(key='range_m', value=f'{state.range_m:.2f}'),
@@ -170,8 +175,8 @@ class IsssDriverNode(Node):
                 num_samples=request.num_samples,
                 num_phases=request.num_phases,
             )
-        except ValueError:
-            response.success, response.message = False, 'Invalid configuration values'
+        except ValueError as exc:
+            response.success, response.message = False, f'Invalid configuration: {exc}'
         except NotConnectedError:
             response.success, response.message = False, 'Sonar is not connected'
         except OSError:
@@ -201,12 +206,10 @@ class IsssDriverNode(Node):
 
 
 def _validate(p: dict) -> None:
-    if p['range'] <= 0.0:
-        raise ValueError("Parameter 'range' must be > 0")
-    if p['num_samples'] <= 0:
-        raise ValueError("Parameter 'num_samples' must be > 0")
-    if p['num_phases'] < 0:
-        raise ValueError("Parameter 'num_phases' must be >= 0")
+    try:
+        check_settings(p['range'], p['num_samples'], p['num_phases'])
+    except ValueError as exc:
+        raise ValueError(f'Invalid parameters: {exc}') from None
     if not 0 < p['port'] <= 65535:
         raise ValueError("Parameter 'port' must be in [1, 65535]")
     for name in ('port_phase_sign', 'starboard_phase_sign'):

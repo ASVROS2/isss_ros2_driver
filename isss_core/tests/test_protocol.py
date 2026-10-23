@@ -11,6 +11,7 @@ from isss.protocol import (
     PHASE_COUNTS_PER_CYCLE,
     SOP1,
     SOP2,
+    check_settings,
     compute_decimation,
     counts_from_depression,
     depression_from_counts,
@@ -58,6 +59,23 @@ class TestDecimation:
     def test_default_range(self):
         assert compute_decimation(20.0, 1000) == 111
 
+    def test_settings_that_fit_the_registers_pass(self):
+        check_settings(20.0, 1000, 2)
+        check_settings(40.0, 2000, 0)
+
+    @pytest.mark.parametrize("range_m, num_samples, num_phases", [
+        (0.0, 1000, 2),       # no range
+        (0.1, 1000, 2),       # decimation 0
+        (300.0, 10, 2),       # decimation 166666, would be written as 0x8B0A
+        (20.0, 70000, 2),     # sample count beyond 16 bits
+        (20.0, 0, 2),
+        (20.0, 1000, -1),
+        (20.0, 1000, 70000),
+    ])
+    def test_settings_outside_the_registers_are_rejected(self, range_m, num_samples, num_phases):
+        with pytest.raises(ValueError):
+            check_settings(range_m, num_samples, num_phases)
+
 
 class TestParseHeader:
     def test_round_trip(self):
@@ -91,6 +109,11 @@ class TestParsePayload:
         payload = _make_sample(40000, 0, 0, 0)
         samples = parse_payload(payload, 1, config)
         assert samples.port_phase_counts == [40000 - 65536]
+
+    @pytest.mark.parametrize("word, counts", [(0x7FFF, 32767), (0x8000, -32768), (0xFFFF, -1)])
+    def test_phase_is_twos_complement(self, word, counts):
+        samples = parse_payload(_make_sample(word, 0, 0, 0), 1, SonarConfig())
+        assert samples.port_phase_counts == [counts]
 
     def test_zero_counts_is_boresight(self):
         config = SonarConfig()

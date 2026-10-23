@@ -44,6 +44,17 @@ def test_vectorised_decoder_matches_reference():
         np.testing.assert_allclose(depression[i, :, 1], samples.starboard_depression, rtol=0, atol=1e-12)
 
 
+def test_vectorised_phase_sign_rule_matches_reference():
+    from isss.protocol import parse_packet
+
+    packet = bytearray(synthetic_packet(num_samples=3))
+    for i, word in enumerate((0x7FFF, 0x8000, 0xFFFF)):
+        packet[HEADER_SIZE + 6 * i: HEADER_SIZE + 6 * i + 2] = word.to_bytes(2, "big")
+    counts = decode_packets([bytes(packet)], 3).counts[0, :, 0].tolist()
+    assert counts == parse_packet(bytes(packet), SonarConfig(num_samples=3)).samples.port_phase_counts
+    assert counts == [32767, -32768, -1]
+
+
 def test_framing_skips_sync_patterns_inside_payloads():
     packet = bytearray(synthetic_packet())
     packet[100:112] = packet[:12]  # a header-looking pattern inside the payload

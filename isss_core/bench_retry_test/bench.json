@@ -1,0 +1,511 @@
+{
+  "sonar": "192.168.2.62:57349",
+  "started_utc": "2026-10-21T20:45:25.152348+00:00",
+  "passed": true,
+  "steps": [
+    {
+      "name": "connect",
+      "status": "pass",
+      "summary": "TCP connect in 1.1 ms",
+      "data": {
+        "connect_ms": 1.139082945883274
+      }
+    },
+    {
+      "name": "stream on connect",
+      "status": "info",
+      "summary": "streams on connect: 14 packets, 1000 samples, decimation [165]",
+      "data": {
+        "bytes": 88976,
+        "seconds": 0.6,
+        "packets": 14,
+        "spacing": 6012,
+        "num_samples": 1000,
+        "decimations": [
+          165
+        ],
+        "ping_interval_ms": 39.9,
+        "resyncs": 0,
+        "size_fields": [
+          6007
+        ]
+      }
+    },
+    {
+      "name": "baseline configuration",
+      "status": "pass",
+      "summary": "33 packets of 6012 bytes, decimation 111, 26.9 ms apart",
+      "data": {
+        "range_m": 20.0,
+        "num_samples": 1000,
+        "register_writes": [
+          [
+            16,
+            111
+          ],
+          [
+            17,
+            1000
+          ],
+          [
+            18,
+            2
+          ]
+        ],
+        "expected_decimation": 111,
+        "expected_interval_ms": 26.667,
+        "bytes": 201536,
+        "seconds": 0.901,
+        "packets": 33,
+        "spacing": 6012,
+        "decimations": [
+          111
+        ],
+        "ping_interval_ms": 26.9,
+        "resyncs": 0,
+        "size_fields": [
+          6007
+        ]
+      }
+    },
+    {
+      "name": "range sweep",
+      "status": "pass",
+      "summary": "all ranges as expected; interval = 1.333 ms/m \u00b7 range + 0.20 ms (\u2248 1501 m/s)",
+      "data": {
+        "ranges": [
+          {
+            "ok": true,
+            "problems": [],
+            "range_m": 10.0,
+            "num_samples": 1000,
+            "register_writes": [
+              [
+                16,
+                55
+              ],
+              [
+                17,
+                1000
+              ],
+              [
+                18,
+                2
+              ]
+            ],
+            "expected_decimation": 55,
+            "expected_interval_ms": 13.333,
+            "bytes": 403608,
+            "seconds": 0.901,
+            "packets": 66,
+            "spacing": 6012,
+            "decimations": [
+              55
+            ],
+            "ping_interval_ms": 13.5,
+            "resyncs": 0,
+            "size_fields": [
+              6007
+            ]
+          },
+          {
+            "ok": true,
+            "problems": [],
+            "range_m": 20.0,
+            "num_samples": 1000,
+            "register_writes": [
+              [
+                16,
+                111
+              ],
+              [
+                17,
+                1000
+              ],
+              [
+                18,
+                2
+              ]
+            ],
+            "expected_decimation": 111,
+            "expected_interval_ms": 26.667,
+            "bytes": 201536,
+            "seconds": 0.901,
+            "packets": 33,
+            "spacing": 6012,
+            "decimations": [
+              111
+            ],
+            "ping_interval_ms": 26.9,
+            "resyncs": 0,
+            "size_fields": [
+              6007
+            ]
+          },
+          {
+            "ok": true,
+            "problems": [],
+            "range_m": 40.0,
+            "num_samples": 1000,
+            "register_writes": [
+              [
+                16,
+                222
+              ],
+              [
+                17,
+                1000
+              ],
+              [
+                18,
+                2
+              ]
+            ],
+            "expected_decimation": 222,
+            "expected_interval_ms": 53.333,
+            "bytes": 101304,
+            "seconds": 0.902,
+            "packets": 16,
+            "spacing": 6012,
+            "decimations": [
+              222
+            ],
+            "ping_interval_ms": 53.5,
+            "resyncs": 0,
+            "size_fields": [
+              6007
+            ]
+          }
+        ],
+        "fit_ms_per_m_and_offset_ms": [
+          1.3328571428571427,
+          0.2000000000000064
+        ]
+      }
+    },
+    {
+      "name": "sample count sweep",
+      "status": "pass",
+      "summary": "packet size and decimation follow the sample count",
+      "data": {
+        "samples": [
+          {
+            "ok": true,
+            "problems": [],
+            "range_m": 20.0,
+            "num_samples": 500,
+            "register_writes": [
+              [
+                16,
+                222
+              ],
+              [
+                17,
+                500
+              ],
+              [
+                18,
+                2
+              ]
+            ],
+            "expected_decimation": 222,
+            "expected_interval_ms": 26.667,
+            "bytes": 101304,
+            "seconds": 0.901,
+            "packets": 33,
+            "spacing": 3012,
+            "decimations": [
+              222
+            ],
+            "ping_interval_ms": 26.8,
+            "resyncs": 0,
+            "size_fields": [
+              6007
+            ]
+          },
+          {
+            "ok": true,
+            "problems": [],
+            "range_m": 20.0,
+            "num_samples": 1000,
+            "register_writes": [
+              [
+                16,
+                111
+              ],
+              [
+                17,
+                1000
+              ],
+              [
+                18,
+                2
+              ]
+            ],
+            "expected_decimation": 111,
+            "expected_interval_ms": 26.667,
+            "bytes": 201536,
+            "seconds": 0.902,
+            "packets": 33,
+            "spacing": 6012,
+            "decimations": [
+              111
+            ],
+            "ping_interval_ms": 26.9,
+            "resyncs": 0,
+            "size_fields": [
+              6007
+            ]
+          },
+          {
+            "ok": true,
+            "problems": [],
+            "range_m": 20.0,
+            "num_samples": 2000,
+            "register_writes": [
+              [
+                16,
+                55
+              ],
+              [
+                17,
+                2000
+              ],
+              [
+                18,
+                2
+              ]
+            ],
+            "expected_decimation": 55,
+            "expected_interval_ms": 26.667,
+            "bytes": 402000,
+            "seconds": 0.9,
+            "packets": 33,
+            "spacing": 12012,
+            "decimations": [
+              55
+            ],
+            "ping_interval_ms": 26.9,
+            "resyncs": 0,
+            "size_fields": [
+              6007
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "phase setting",
+      "status": "info",
+      "summary": "phases=0: 4280 distinct values, 0% zero; phases=2: 4215 distinct values, 0% zero",
+      "data": {
+        "by_num_phases": {
+          "0": {
+            "zero_fraction": 0.0033,
+            "distinct_values": 4280,
+            "min": -12544,
+            "max": 14592
+          },
+          "2": {
+            "zero_fraction": 0.0038,
+            "distinct_values": 4215,
+            "min": -11008,
+            "max": 11264
+          }
+        }
+      }
+    },
+    {
+      "name": "configuration across connections",
+      "status": "info",
+      "summary": "kept: still decimation 166 (30 m) after reconnecting",
+      "data": {
+        "written_decimation": 166,
+        "bytes": 68072,
+        "seconds": 0.453,
+        "packets": 10,
+        "spacing": 6012,
+        "num_samples": 1000,
+        "decimations": [
+          166
+        ],
+        "ping_interval_ms": 40.1,
+        "resyncs": 0,
+        "size_fields": [
+          6007
+        ]
+      }
+    },
+    {
+      "name": "device clock",
+      "status": "pass",
+      "summary": "device clock +71 ppm against host over 6 s; arrival jitter p95 1.4 ms; 0 gaps; counter at 94.0 s (0.03 h)",
+      "data": {
+        "packets": 223,
+        "seconds": 5.97,
+        "drift_ppm": 70.6,
+        "arrival_jitter_ms": {
+          "p50": 0.609,
+          "p95": 1.42,
+          "max": 5.95
+        },
+        "gaps": 0,
+        "backwards": 0,
+        "device_time_at_start_s": 93.981,
+        "device_uptime_h_if_counter_starts_at_power_on": 0.026
+      }
+    },
+    {
+      "name": "driver and logging",
+      "status": "pass",
+      "summary": "55 pings at 36.4 Hz; log and sidecar agree: 1792615542.550076.bin",
+      "data": {
+        "log": "bench_retry_test/logs/1792615542.550076.bin",
+        "pings": 55,
+        "ping_rate_hz": 36.39,
+        "sidecar": {
+          "format": "isss-bin-sidecar",
+          "version": 1,
+          "bin": "1792615542.550076.bin",
+          "writer": {
+            "package": "isss-core",
+            "version": "0.2.0"
+          },
+          "sonar": {
+            "ip": "192.168.2.62",
+            "port": 57349
+          },
+          "calibration": {
+            "sound_velocity": 1440.9,
+            "counts_per_unit_sine": 15218.0,
+            "boresight_depression_deg": 44.5,
+            "port_phase_sign": 1,
+            "starboard_phase_sign": 1
+          },
+          "segments": [
+            {
+              "byte_offset": 0,
+              "utc": "2026-10-21T20:45:42.550235+00:00",
+              "range_m": 20.0,
+              "num_samples": 1000,
+              "num_phases": 2,
+              "decimation": 111
+            }
+          ],
+          "register_writes": [
+            {
+              "utc": "2026-10-21T20:45:42.550276+00:00",
+              "register": 16,
+              "value": 111
+            },
+            {
+              "utc": "2026-10-21T20:45:42.550276+00:00",
+              "register": 17,
+              "value": 1000
+            },
+            {
+              "utc": "2026-10-21T20:45:42.550276+00:00",
+              "register": 18,
+              "value": 2
+            }
+          ],
+          "first_packet": {
+            "utc": "2026-10-21T20:45:42.599502+00:00",
+            "unix": 1792615542.59952,
+            "ping_time": 1000057
+          },
+          "last_packet": {
+            "utc": "2026-10-21T20:45:44.050214+00:00",
+            "unix": 1792615544.050285,
+            "ping_time": 1014581
+          },
+          "packets": 55,
+          "bytes": 330660,
+          "opened_utc": "2026-10-21T20:45:42.550280+00:00",
+          "closed_utc": "2026-10-21T20:45:44.056818+00:00"
+        },
+        "health": {
+          "n_pings": 55,
+          "num_samples": 1000,
+          "worst": "warn",
+          "checks": [
+            {
+              "name": "configuration",
+              "status": "ok",
+              "value": "decimation 111, 1000 samples = 20.0 m",
+              "detail": ""
+            },
+            {
+              "name": "ping interval",
+              "status": "ok",
+              "value": "26.9 ms",
+              "detail": "expected about 26.6 ms (two-way travel time for 20.0 m)"
+            },
+            {
+              "name": "gaps",
+              "status": "ok",
+              "value": "0 gaps, 0 backwards",
+              "detail": ""
+            },
+            {
+              "name": "phase encoding",
+              "status": "ok",
+              "value": "0.03% of counts outside \u00b110240",
+              "detail": ""
+            },
+            {
+              "name": "port echoes",
+              "status": "warn",
+              "value": "1.6% of samples well above background",
+              "detail": "Almost no echoes; the sonar may be out of the water."
+            },
+            {
+              "name": "port depression",
+              "status": "ok",
+              "value": "0.0% of strong returns have no solution",
+              "detail": "905 strong returns; |counts| > K = 15218 has no solution"
+            },
+            {
+              "name": "port saturation",
+              "status": "ok",
+              "value": "0.00% of samples at 255",
+              "detail": ""
+            },
+            {
+              "name": "starboard echoes",
+              "status": "warn",
+              "value": "2.9% of samples well above background",
+              "detail": "Almost no echoes; the sonar may be out of the water."
+            },
+            {
+              "name": "starboard depression",
+              "status": "ok",
+              "value": "0.0% of strong returns have no solution",
+              "detail": "1611 strong returns; |counts| > K = 15218 has no solution"
+            },
+            {
+              "name": "starboard saturation",
+              "status": "ok",
+              "value": "0.00% of samples at 255",
+              "detail": ""
+            },
+            {
+              "name": "header size field",
+              "status": "info",
+              "value": "6007",
+              "detail": "Always 6007 in the logs seen so far; not a packet size."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "driver reconnect",
+      "status": "pass",
+      "summary": "pings resumed 0.7 s after the connection dropped",
+      "data": {
+        "recovery_s": 0.66
+      }
+    }
+  ]
+}

@@ -127,9 +127,7 @@ class ISSSonar:
         if sock is None:
             raise RuntimeError("Not connected")
         tx = bytes([0xFE, reg & 0xFF, (value >> 8) & 0xFF, value & 0xFF])
-        sent = sock.send(tx)
-        if sent != len(tx):
-            raise IOError("Failed to send register write")
+        sock.sendall(tx)
 
     def recv_raw(self, max_bytes: int = 65536) -> bytes:
         """Whatever bytes are available (up to ``max_bytes``), without framing; b"" on close."""

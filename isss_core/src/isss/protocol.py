@@ -19,8 +19,8 @@ FREQ_ID_DEFAULT = 0x01
 SOP1 = 0xFE
 SOP2 = 0x05
 
-_MAX_POSITIVE = 32768
 _FULL_RANGE = 65536
+REGISTER_MAX = 0xFFFF  # registers are 16 bits wide
 
 # One electrical phase cycle (2 pi) is 20480 counts: the counts fill +-10240
 # and wrap there (sonar3d_reference mesh check, Oct 2026; docs/protocol.md).
@@ -80,6 +80,25 @@ def compute_decimation(range_m: float, num_samples: int) -> int:
     return int(range_m / num_samples / 750.0 * (SAMPLE_CLOCK_HZ / SAMPLE_CLOCK_DIVIDER))
 
 
+def check_settings(range_m: float, num_samples: int, num_phases: int) -> None:
+    """Raise ``ValueError`` unless the settings fit the 16-bit registers.
+
+    ``set_register`` would otherwise silently write the low 16 bits.
+    """
+    if range_m <= 0:
+        raise ValueError(f"range must be > 0, got {range_m}")
+    if not 0 < num_samples <= REGISTER_MAX:
+        raise ValueError(f"num_samples must be in [1, {REGISTER_MAX}], got {num_samples}")
+    if not 0 <= num_phases <= REGISTER_MAX:
+        raise ValueError(f"num_phases must be in [0, {REGISTER_MAX}], got {num_phases}")
+    decimation = compute_decimation(range_m, num_samples)
+    if not 0 < decimation <= REGISTER_MAX:
+        raise ValueError(
+            f"range {range_m} m at {num_samples} samples gives decimation {decimation}, "
+            f"outside [1, {REGISTER_MAX}]"
+        )
+
+
 def range_from_decimation(decimation: int, num_samples: int) -> float:
     """Invert ``compute_decimation``: the range a decimation and sample count correspond to."""
     return decimation * num_samples * 750.0 / (SAMPLE_CLOCK_HZ / SAMPLE_CLOCK_DIVIDER)
@@ -126,7 +145,7 @@ def parse_header(header: bytes) -> PacketHeader:
 
 def _decode_phase(high: int, low: int) -> int:
     phase = (high << 8) | low
-    if phase > _MAX_POSITIVE:
+    if phase >= 0x8000:  # two's complement
         phase -= _FULL_RANGE
     return phase
 

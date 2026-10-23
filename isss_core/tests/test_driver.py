@@ -5,6 +5,7 @@ import time
 
 import pytest
 
+import isss.driver
 from isss import NotConnectedError, SonarConfig, SonarDriver
 from isss.log import find_packet_offsets
 from isss.protocol import compute_decimation, parse_header
@@ -115,6 +116,18 @@ def test_starts_without_sonar_and_rejects_configure():
         driver.stop()
 
 
+def test_rejects_settings_the_registers_cannot_hold():
+    with SimulatedSonar(rate_hz=50) as sim:
+        with pytest.raises(ValueError):
+            SonarDriver(_config(sim.port, range_m=300.0, num_samples=10)).start()
+        with SonarDriver(_config(sim.port)) as driver:
+            assert _wait_for(lambda: driver.status().connected)
+            with pytest.raises(ValueError):
+                driver.configure(range_m=0.1)  # decimation 0
+            assert driver.config.range_m == 20.0
+        assert all(0 < value <= 0xFFFF for reg, value in sim.register_writes if reg == REG_DECIMATION)
+
+
 def test_logs_raw_packets(tmp_path):
     with SimulatedSonar(rate_hz=50) as sim:
         with SonarDriver(_config(sim.port), log_dir=tmp_path) as driver:
@@ -123,6 +136,23 @@ def test_logs_raw_packets(tmp_path):
             assert _wait_for(lambda: path.stat().st_size >= 3 * 6012)
     header, expected = path.read_bytes()[:12], synthetic_packet()[:12]
     assert header[:5] + header[9:] == expected[:5] + expected[9:]  # bytes 5-8 are the ping time
+
+
+def test_failed_log_write_stops_logging_but_keeps_streaming(tmp_path):
+    with SimulatedSonar(rate_hz=50) as sim:
+        pings = Collector()
+        with SonarDriver(_config(sim.port), pings, log_dir=tmp_path) as driver:
+            assert _wait_for(lambda: len(pings) >= 2)
+
+            def disk_full(_packet):
+                raise OSError(28, "No space left on device")
+
+            driver._log_writer.write = disk_full
+            assert _wait_for(lambda: not driver.status().logging)
+            status = driver.status()
+            assert status.connected and "No space left" in status.last_error
+            before = len(pings)
+            assert _wait_for(lambda: len(pings) > before + 3)
 
 
 def test_default_pacing_follows_range():
@@ -216,3 +246,51 @@ def test_reconfigure_starts_the_new_segment_at_the_first_new_ping(tmp_path):
     segments = read_sidecar(path)["segments"]
     assert [seg["decimation"] for seg in segments] == [111, 222]
     assert segments[1]["byte_offset"] == offsets[first_new]
+
+
+class IgnoresDecimation(SimulatedSonar):
+    """Keeps its power-on decimation until ``obey`` is set, as a device that rejects or clamps a value would."""
+
+    obey = False
+
+    def apply_register(self, reg, value):
+        if reg != REG_DECIMATION or self.obey:
+            super().apply_register(reg, value)
+
+
+def test_reports_a_sonar_that_ignores_the_written_decimation(monkeypatch):
+    monkeypatch.setattr(isss.driver, "SETTLE_TIMEOUT_SEC", 0.3)
+    monkeypatch.setattr(isss.driver, "PING_RATE_STALE_SEC", 0.3)
+    pings = Collector()
+    with IgnoresDecimation(rate_hz=100) as sim:
+        with SonarDriver(_config(sim.port), pings) as driver:
+            assert _wait_for(lambda: "decimation 165" in driver.status().last_error)
+            status = driver.status()
+            assert status.connected and status.dropped_pings > 10
+            assert status.ping_rate_hz == 0.0 and len(pings) == 0
+
+            with sim._lock:  # the sonar takes the setting after all
+                sim.obey = True
+                sim.apply_register(REG_DECIMATION, compute_decimation(20.0, 1000))
+            assert _wait_for(lambda: len(pings) >= 1)
+            assert driver.status().last_error == ""
+
+
+def test_stop_during_a_reconnect_closes_the_new_connection():
+    """The connection is the sonar's on switch: a reconnect that completes while stopping must not leave it on."""
+    with SimulatedSonar(rate_hz=50) as sim:
+        driver = SonarDriver(_config(sim.port))
+        driver.start()
+        assert _wait_for(lambda: driver.status().connected)
+        connect, entered = driver._sonar.connect, threading.Event()
+
+        def connect_as_stop_is_called():
+            entered.set()
+            assert _wait_for(driver._stop.is_set)
+            connect()
+
+        driver._sonar.connect = connect_as_stop_is_called
+        sim.drop_client()
+        assert entered.wait(3.0)
+        driver.stop()
+        assert not driver._sonar.is_connected

@@ -163,10 +163,13 @@ class BinLogWriter:
         self._notify(closed)
 
     def _close_unlocked(self) -> Optional[Path]:
-        if self._file is None:
+        file, self._file = self._file, None
+        if file is None:
             return None
-        self._file.close()
-        self._file = None
+        try:
+            file.close()
+        except OSError:  # e.g. disk full on the final flush; the log is closed either way
+            pass
         if self._sidecar is not None and self.path is not None:
             self._sidecar["closed_utc"] = sidecar.utc_now()
             sidecar.write_sidecar(self.path, self._sidecar)

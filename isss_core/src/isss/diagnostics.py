@@ -83,9 +83,9 @@ def decode_packets(packets: Sequence[bytes], num_samples: int = DEFAULT_SAMPLES)
     payload = raw[:, HEADER_SIZE:].reshape(len(whole), num_samples, BYTES_PER_SAMPLE)
 
     def phase(hi: int, lo: int) -> np.ndarray:
-        # Same sign rule as isss.protocol._decode_phase: values above 32768 wrap negative
+        # Same sign rule as isss.protocol._decode_phase: two's complement
         value = (payload[:, :, hi].astype(np.int32) << 8) | payload[:, :, lo]
-        return np.where(value > 32768, value - 65536, value)
+        return np.where(value >= 32768, value - 65536, value)
 
     return PingArrays(
         ping_time=(head[:, 5] << 24) | (head[:, 6] << 16) | (head[:, 7] << 8) | head[:, 8],
@@ -146,11 +146,8 @@ def load_log(
             start, end, seg = ranges[segment]
             num_samples = seg["num_samples"]
         elif len(counts) > 1:
-            raise ValueError(
-                f"{path} has segments with different sample counts "
-                f"({', '.join(f'{i}: {seg['num_samples']}' for i, (_, _, seg) in enumerate(ranges))}); "
-                "pass segment="
-            )
+            listing = ", ".join(f"{i}: {seg['num_samples']}" for i, (_, _, seg) in enumerate(ranges))
+            raise ValueError(f"{path} has segments with different sample counts ({listing}); pass segment=")
         else:
             num_samples = counts.pop() if counts else DEFAULT_SAMPLES
     num_samples = num_samples or DEFAULT_SAMPLES
@@ -204,25 +201,31 @@ def sensor_frame_points(
     *,
     min_excess: float = 25.0,
     ping_slice: slice = slice(None),
+    keep: np.ndarray | None = None,
 ) -> dict[str, np.ndarray]:
     """Strong returns in the sensor frame: across-track ``y`` (port negative) and ``z`` (up).
 
     No motion is applied, so pings are stacked on top of each other. Over a flat
     seabed the points should form a horizontal line at minus the altitude.
+    ``keep`` (one bool per sample of the selected pings) replaces the
+    ``min_excess`` test, e.g. with the mask of a filter chain. ``ping`` and
+    ``sample`` index each point within the selection.
     """
     sub = arrays.select(ping_slice)
     r = sub.slant_range(config)[None, :, None]
     beta = sub.depression(config)
-    keep = strong_mask(sub, min_excess) & np.isfinite(beta)
+    keep = (strong_mask(sub, min_excess) if keep is None else keep) & np.isfinite(beta)
     side_sign = np.array([-1.0, 1.0])[None, None, :]
     y = side_sign * r * np.cos(beta)
     z = -r * np.sin(beta)
-    side = np.broadcast_to(np.arange(2)[None, None, :], beta.shape)
+    ping, sample, side = np.nonzero(keep)
     return {
         "y": y[keep],
         "z": z[keep],
         "intensity": sub.intensity[keep],
-        "side": side[keep],
+        "side": side,
+        "ping": ping,
+        "sample": sample,
     }
 
 

@@ -18,10 +18,16 @@ from typing import Any, Callable, Optional
 
 from isss.config import SonarConfig
 from isss.log import BinLogWriter
-from isss.protocol import Ping, compute_decimation, parse_header, parse_packet
+from isss.protocol import Ping, check_settings, compute_decimation, parse_header, parse_packet
 from isss.sonar import ISSSonar
 
 PingCallback = Callable[[Ping], None]
+
+# After a register write the sonar sends a few pings in flight at the old setting.
+# Still dropping pings this long after the write means it did not take the setting.
+SETTLE_TIMEOUT_SEC = 3.0
+# With no accepted ping for this long, the reported ping rate decays toward zero.
+PING_RATE_STALE_SEC = 2.0
 
 
 def netcdf_available() -> bool:
@@ -92,8 +98,10 @@ class SonarDriver:
         self._last_register_writes: list[tuple[int, int]] = []
         self._expected_decimation: int | None = None
         self._settled = True  # a ping at the expected decimation arrived since the last setup
+        self._setup_time = time.monotonic()
         self._dropped_pings = 0
         self._dropped_since_setup = 0
+        self._drop_error = ""  # the last_error set by _accept, cleared once pings are accepted again
 
     # Lifecycle
 
@@ -101,6 +109,7 @@ class SonarDriver:
         """Connect (or schedule reconnects) and start the read thread."""
         if self._thread is not None:
             return
+        check_settings(self.config.range_m, self.config.num_samples, self.config.num_phases)
         self._stop.clear()
         if not self._connect_and_setup():
             self.log.warning("Initial sonar connection failed; read loop will attempt reconnect.")
@@ -116,6 +125,7 @@ class SonarDriver:
         if self._thread is not None:
             self._thread.join(timeout=self.config.recv_timeout_sec + 1.0)
             self._thread = None
+        self._sonar.disconnect()  # in case a reconnect completed while stopping
         if self._log_writer is not None:
             self._log_writer.close()
         for thread in self._exports:
@@ -148,17 +158,18 @@ class SonarDriver:
         new_range = self.config.range_m if range_m is None else range_m
         new_samples = self.config.num_samples if num_samples is None else num_samples
         new_phases = self.config.num_phases if num_phases is None else num_phases
-        if new_range <= 0 or new_samples <= 0 or new_phases < 0:
-            raise ValueError("Invalid configuration values")
+        check_settings(new_range, new_samples, new_phases)
 
         with self._lock:
+            # Together with the expectation, so the read thread never frames a
+            # packet with the new sample count but accepts it at the old decimation.
             self.config.range_m = new_range
             self.config.num_samples = new_samples
             self.config.num_phases = new_phases
+            self._expect_configuration_unlocked()
 
         if not self.is_connected:
             raise NotConnectedError("Sonar is not connected")
-        self._expect_configuration()
         try:
             self._note_setup(self._sonar.setup_sonar())
         except OSError as exc:
@@ -207,9 +218,12 @@ class SonarDriver:
 
     def status(self) -> DriverStatus:
         with self._lock:
+            # The rate is only updated per accepted ping; without any, report the decay.
+            elapsed = time.monotonic() - self._ping_window_start
+            rate = self._ping_rate_hz if elapsed < PING_RATE_STALE_SEC else self._ping_count_window / elapsed
             return DriverStatus(
                 connected=self._connected,
-                ping_rate_hz=self._ping_rate_hz,
+                ping_rate_hz=rate,
                 last_error=self._last_error,
                 range_m=self.config.range_m,
                 num_samples=self.config.num_samples,
@@ -227,6 +241,12 @@ class SonarDriver:
     # Internals
 
     def _run(self) -> None:
+        try:
+            self._read_loop()
+        finally:
+            self._sonar.disconnect()
+
+    def _read_loop(self) -> None:
         while not self._stop.is_set():
             if not self.is_connected and not self._reconnect():
                 continue
@@ -244,7 +264,10 @@ class SonarDriver:
                 continue
             self._update_ping_rate()
             if self._log_writer is not None:
-                self._log_writer.write(packet)
+                try:
+                    self._log_writer.write(packet)
+                except OSError as exc:  # e.g. disk full: keep streaming, stop logging
+                    self._log_failed(exc)
             if self.on_ping is not None:
                 try:
                     self.on_ping(parse_packet(packet, self.config))
@@ -285,9 +308,14 @@ class SonarDriver:
     def _expect_configuration(self) -> None:
         """Call before writing the registers, so pings still in flight count as stale."""
         with self._lock:
-            self._expected_decimation = compute_decimation(self.config.range_m, self.config.num_samples)
-            self._settled = False
-            self._dropped_since_setup = 0
+            self._expect_configuration_unlocked()
+
+    def _expect_configuration_unlocked(self) -> None:
+        self._expected_decimation = compute_decimation(self.config.range_m, self.config.num_samples)
+        self._settled = False
+        self._setup_time = time.monotonic()
+        self._dropped_since_setup = 0
+        self._clear_drop_error_unlocked()  # judged afresh against the new write
 
     def _accept(self, packet: bytes) -> bool:
         """Whether a packet is at the configuration the driver wrote; others are dropped.
@@ -300,25 +328,52 @@ class SonarDriver:
         another sample count is mis-framed by ``read_packet`` anyway. The header
         only echoes the decimation, so a change of sample count that keeps it
         (20 m at 1000 samples, 40 m at 2000) cannot be told apart.
+
+        ``last_error`` is set when the decimation changes after the sonar had
+        settled, or when it has not settled ``SETTLE_TIMEOUT_SEC`` after a write
+        (it ignored or clamped the value), and cleared once pings are accepted.
         """
         decimation = parse_header(packet).decimation
+        error = ""
+        new_error = False
         with self._lock:
             expected = self._expected_decimation
             ok = expected is None or decimation == expected
             if ok:
                 dropped, self._dropped_since_setup = self._dropped_since_setup, 0
                 self._settled = True
+                self._clear_drop_error_unlocked()
             else:
                 self._dropped_pings += 1
                 self._dropped_since_setup += 1
-                changed_under_us = self._settled  # another client, or a reset we did not see
+                if self._settled:  # another client, or a reset we did not see
+                    error = f"Sonar sends decimation {decimation}, expected {expected}; dropping its pings"
+                elif time.monotonic() - self._setup_time > SETTLE_TIMEOUT_SEC:
+                    error = (f"Sonar still sends decimation {decimation} {SETTLE_TIMEOUT_SEC:.0f} s after "
+                             f"writing {expected}; dropping its pings ({self._dropped_since_setup} so far)")
+                new_error = bool(error) and not self._drop_error
+                if new_error:
+                    self._drop_error = self._last_error = error
         if ok:
             if dropped:
                 self.log.info(f"Dropped {dropped} pings not at decimation {expected}")
             return True
-        if changed_under_us:
-            self._set_error(f"Sonar sends decimation {decimation}, expected {expected}; dropping its pings")
+        if new_error:
+            self.log.error(error)
         return False
+
+    def _clear_drop_error_unlocked(self) -> None:
+        if self._drop_error and self._last_error == self._drop_error:
+            self._last_error = ""
+        self._drop_error = ""
+
+    def _log_failed(self, exc: OSError) -> None:
+        self._set_error(f"Log write failed, logging stopped: {exc}")
+        self.log.error(f"Log write to {self._log_writer.path} failed, logging stopped: {exc}")
+        try:
+            self._log_writer.close()
+        except OSError:
+            pass
 
     def _note_setup(self, writes: list[tuple[int, int]]) -> None:
         self._last_register_writes = writes

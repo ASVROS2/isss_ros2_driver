@@ -119,3 +119,29 @@ def test_live_buffer_from_simulator():
                 time.sleep(0.02)
             viewer.set_arrays(buffer.arrays())
             assert viewer.arrays.num_samples == 500
+
+
+def test_viewer_takes_another_mask_and_a_trail():
+    import numpy as np
+
+    asked = []
+
+    def keep(arrays, config, pings):
+        asked.append(pings)
+        mask = np.zeros(arrays.select(pings).intensity.shape, dtype=bool)
+        mask[:, 400:, 1] = True  # starboard, far half only
+        return mask
+
+    viewer = PingViewer(_arrays(), SonarConfig(), keep=keep, trail=5)
+    assert asked[-1] == slice(25, 30)
+    assert "Last 5 pings" in viewer.ax_prof.get_title() and "kept returns" in viewer.ax_prof.get_title()
+    from matplotlib.colors import to_rgba
+
+    from isss.viz import GRID, PORT, SIDE_COLORS
+
+    def offsets(color):
+        return [c.get_offsets() for c in viewer.ax_prof.collections
+                if len(c.get_offsets()) and tuple(c.get_facecolor()[0][:3]) == to_rgba(color)[:3]]
+
+    assert offsets(SIDE_COLORS[PORT]) == []  # port is dropped by the mask...
+    assert any((o[:, 0] < 0).any() for o in offsets(GRID))  # ...and its strong returns show in grey

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from typing import Callable, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -254,6 +255,8 @@ def report_figures(arrays: PingArrays, config: SonarConfig) -> dict[str, plt.Fig
 
 # Interactive viewer
 
+KeepFn = Callable[[PingArrays, SonarConfig, slice], np.ndarray]
+
 
 class PingViewer:
     """Waterfall on the left, the selected ping on the right.
@@ -264,10 +267,19 @@ class PingViewer:
     the check boxes) flip the port/starboard phase sign, mirroring that side's
     returns about its boresight, as for a transducer mounted upside down.
     Hovering the profile reads out the angles and the counts for that point.
+
+    ``keep(arrays, config, pings)`` replaces the "strong return" test with
+    another mask, one bool per sample of ``arrays.select(pings)``; it gets the
+    whole stack so it can look at neighbouring pings (``isss_proc`` passes its
+    filter chain). The profile then shows the returns it keeps of the last
+    ``trail`` pings, and the strong returns it drops in grey.
     """
 
-    def __init__(self, arrays: PingArrays, config: SonarConfig, *, title: str = "ISSS", live: bool = False) -> None:
+    def __init__(self, arrays: PingArrays, config: SonarConfig, *, title: str = "ISSS", live: bool = False,
+                 keep: Optional[KeepFn] = None, trail: int = 1) -> None:
         self.config = dataclasses.replace(config)  # the flips change our copy only
+        self.keep = keep
+        self.trail = max(1, trail)
         self.live = live
         self.arrays = arrays
         self.title = title
@@ -334,7 +346,10 @@ class PingViewer:
                 return
             r = a.slant_range(self.config)
             one = a.select(slice(i, i + 1))
-            strong = strong_mask(one)[0]
+            first = max(0, i - self.trail + 1)
+            kept = self._kept(slice(first, i + 1))
+            strong = kept[-1]
+            label = "kept" if self.keep else "strong"
             bottom = detect_bottom(one)[0]
             depression = one.depression(self.config)[0]
             for side, name in enumerate(SIDES):
@@ -342,7 +357,7 @@ class PingViewer:
                 self.ax_int.plot(r, a.intensity[i, :, side], color=color, label=name)
                 self.ax_phase.scatter(r, depression[:, side], s=4, color=color, alpha=0.35, linewidths=0)
                 self.ax_phase.scatter(r[strong[:, side]], depression[strong[:, side], side], s=9,
-                                      color=color, linewidths=0, label=f"{name}, strong")
+                                      color=color, linewidths=0, label=f"{name}, {label}")
                 if bottom[side] >= 0:
                     self.ax_int.axvline(r[bottom[side]], color=color, linewidth=0.8, linestyle=":")
             self.ax_int.set_title("Intensity (dotted: first sustained return)")
@@ -352,14 +367,21 @@ class PingViewer:
             _grid(self.ax_int)
             self._draw_bearing_axes()
 
-            pts = sensor_frame_points(one, self.config)
+            pts = sensor_frame_points(a, self.config, ping_slice=slice(first, i + 1), keep=kept)
             reach = float(r[-1]) if r.size else 1.0
+            if self.keep:
+                dropped = sensor_frame_points(one, self.config, keep=strong_mask(one) & ~kept[-1:])
+                self.ax_prof.scatter(dropped["y"], dropped["z"], s=4, color=GRID, linewidths=0)
+            newest = pts["ping"] == i - first
             for side in (PORT, STARBOARD):
                 m = pts["side"] == side
-                self.ax_prof.scatter(pts["y"][m], pts["z"][m], s=6 + pts["intensity"][m] / 25.0,
+                self.ax_prof.scatter(pts["y"][m & ~newest], pts["z"][m & ~newest], s=3,
+                                     color=SIDE_COLORS[side], linewidths=0, alpha=0.25)
+                self.ax_prof.scatter(pts["y"][m & newest], pts["z"][m & newest],
+                                     s=6 + pts["intensity"][m & newest] / 25.0,
                                      color=SIDE_COLORS[side], linewidths=0, alpha=0.8)
             _draw_sector(self.ax_prof, self.config, reach)
-            _profile_axes(self.ax_prof, reach, _profile_title(self.config, "This ping in the sensor frame (strong returns)"))
+            _profile_axes(self.ax_prof, reach, _profile_title(self.config, self._profile_label(i - first + 1)))
 
             t = a.ping_time[i] * 1e-4
             self.fig.suptitle(f"{self.title}   ping {i + 1}/{a.n_pings}   device time {t:.3f} s"
@@ -372,6 +394,18 @@ class PingViewer:
             self.slider.set_val(i)
             self.slider.eventson = True
         self.fig.canvas.draw_idle()
+
+    def _kept(self, pings: slice) -> np.ndarray:
+        """The samples to show of ``pings``: ``keep``'s mask, or the strong returns."""
+        if self.keep is None:
+            return strong_mask(self.arrays.select(pings))
+        return self.keep(self.arrays, self.config, pings)
+
+    def _profile_label(self, n: int) -> str:
+        what = "kept returns" if self.keep else "strong returns"
+        if n > 1:
+            return f"Last {n} pings in the sensor frame ({what}; faint: earlier pings)"
+        return f"This ping in the sensor frame ({what})"
 
     def _draw_bearing_axes(self) -> None:
         """Depression [rad] on the left; the right axis reads the same points as raw counts.
