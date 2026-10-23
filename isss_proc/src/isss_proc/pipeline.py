@@ -92,6 +92,40 @@ class Pipeline:
         return self.run(Swath(arrays, config))
 
 
+def make_pipeline(
+    *,
+    min_range: float = 1.0,
+    max_range: Optional[float] = None,
+    min_excess: float = 30.0,
+    crosstalk: bool = False,
+    crosstalk_margin: float = 20.0,
+    bias_states: bool = True,
+    first_surface: bool = True,
+    mpaa: bool = False,
+    mpaa_pings: int = 1,
+    mpaa_band: float = 3.0,
+) -> Pipeline:
+    """The default chain with the options of ``isss-proc`` (``min_excess`` 0 drops that stage).
+
+    ``crosstalk`` (parked, see docs/processing.md) is off by default. The
+    command-line tools and the ROS processing node build their pipeline here.
+    """
+    from isss_proc.filters import BiasStates, CrossTalk, FirstSurface, IntensityExcess, MostProbableAngle, RangeGate
+
+    stages: list = [RangeGate(min_range, max_range)]
+    if min_excess > 0:
+        stages.append(IntensityExcess(min_excess))
+    if crosstalk:
+        stages.append(CrossTalk(margin=crosstalk_margin))
+    if bias_states:
+        stages.append(BiasStates())
+    if first_surface:
+        stages.append(FirstSurface())
+    if mpaa:
+        stages.append(MostProbableAngle(pings=mpaa_pings, band_deg=mpaa_band))
+    return Pipeline(stages)
+
+
 class Stream:
     """Online processing: push pings as they arrive, each is processed with up to ``context`` before it.
 

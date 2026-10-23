@@ -3,7 +3,7 @@
 <package format="3">
   <name>isss_ros2_driver</name>
   <version>0.2.0</version>
-  <description>ROS 2 driver for the DeepVision Interferometric Side Scan Sonar (ISSS): a thin wrapper around isss_core</description>
+  <description>ROS 2 driver and processing node for the DeepVision Interferometric Side Scan Sonar (ISSS): thin wrappers around isss_core and isss_proc</description>
   <maintainer email="ignaciotorroba@hotmail.com">Ignacio Torroba</maintainer>
   <license>MIT</license>
 
@@ -13,7 +13,9 @@
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>std_srvs</exec_depend>
   <exec_depend>diagnostic_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>isss_core</exec_depend>
+  <exec_depend>isss_proc</exec_depend>
   <exec_depend>isss_msgs</exec_depend>
 
   <test_depend>python3-pytest</test_depend>

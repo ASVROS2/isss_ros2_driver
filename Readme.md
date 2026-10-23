@@ -49,7 +49,7 @@ ros2 launch isss_ros2_driver isss_driver.launch.py
 Test the node against the simulator (no sonar needed):
 
 ```bash
-colcon test --packages-select isss_core isss_ros2_driver && colcon test-result --verbose
+colcon test --packages-select isss_core isss_proc isss_ros2_driver && colcon test-result --verbose
 ```
 
 ### Launch arguments
@@ -60,6 +60,8 @@ ros2 launch isss_ros2_driver isss_driver.launch.py namespace:=isss_stick ip:=192
 
 `namespace` prefixes all relative topics and services; `ip`, `range` and
 `save_path` override the YAML. `config_file` swaps the whole YAML.
+`cloud:=true` also starts the processing node (`isss_cloud_node`, below), with
+the parameters of `cloud_config_file`.
 
 ### Published topics
 
@@ -68,6 +70,7 @@ ros2 launch isss_ros2_driver isss_driver.launch.py namespace:=isss_stick ip:=192
 | `isss/raw` | `/isss/raw` | `isss_msgs/ISSS` | One ping: intensity, phase counts, depression angles |
 | `isss/status` | `/isss/status` | `isss_msgs/ISSSStatus` | Connection state, ping rate, configuration (1 Hz) |
 | `/diagnostics` | `/diagnostics` | `diagnostic_msgs/DiagnosticArray` | Driver health |
+| `isss/cloud` | `/isss/cloud` | `sensor_msgs/PointCloud2` | From `isss_cloud_node`: the returns of one ping the filters keep, in the ping's `frame_id` and stamp |
 
 ### Services
 
@@ -104,6 +107,37 @@ Defined in [`isss_ros2_driver/config/isss_driver.yaml`](isss_ros2_driver/config/
 | `device_time_offset_sec` | double | `0.0` | Added to device time when stamping |
 | `reconnect_interval_sec` | double | `5.0` | Delay between reconnect attempts |
 | `recv_timeout_sec` | int | `2` | Socket receive timeout |
+
+### Processing node (`isss_cloud_node`)
+
+Subscribes to `isss/raw` and runs the filter chain of [`isss_proc`](isss_proc)
+(the one `isss-proc` uses) on the pings, with the calibration each message
+carries. Pings are processed `block` at a time, each with up to `context`
+pings before it, and published as one `PointCloud2` per ping on `isss/cloud`:
+fields `x` (0: no motion), `y` (across-track, port negative), `z` (up),
+`intensity`, `range` (slant, m) as float32 and `side` (0 port, 1 starboard) as
+uint8. TF places each cloud with the ping's stamp. A block waits for `block`
+pings, so the clouds lag by up to that many pings.
+
+```bash
+ros2 run isss_ros2_driver isss_cloud_node --ros-args -p mpaa:=true
+```
+
+Defined in [`isss_ros2_driver/config/isss_cloud.yaml`](isss_ros2_driver/config/isss_cloud.yaml);
+the filters are described in [`isss_proc`](isss_proc/README.md#stages).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `block` | int | `5` | Pings processed at a time (the chain takes ~50 ms per 200-ping window) |
+| `context` | int | `200` | Pings of history each block is processed with |
+| `min_range` | double | `1.0` | Drop bins nearer than this [m] |
+| `max_range` | double | `0.0` | Drop bins farther than this [m]; `0` = no limit |
+| `min_excess` | double | `30.0` | Intensity above the water column to keep a return; `0` disables the stage |
+| `bias_states` | bool | `true` | Drop phase bias states |
+| `first_surface` | bool | `true` | Drop returns behind the first surface |
+| `mpaa` | bool | `false` | Add the most-probable-angle filter at the end |
+| `mpaa_pings` | int | `1` | Pings pooled per MPAA bin |
+| `mpaa_band` | double | `3.0` | Keep returns this close to the bin's mode [deg] |
 
 ### Message (`isss_msgs/ISSS`)
 

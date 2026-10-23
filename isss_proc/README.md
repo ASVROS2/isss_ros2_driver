@@ -71,6 +71,7 @@ result.rejected_by        # (ping, sample, side): 0 kept, k = stage k, 255 no so
 result.info["bias_states"]
 
 Pipeline([*default_stages(), MostProbableAngle(pings=5)])   # a custom chain
+make_pipeline(min_excess=40, mpaa=True)                     # the chain from isss-proc's options
 
 from isss_proc import CrossTalk, clean_intensity, estimate_leak
 swath = Swath(arrays.select(slice(0, 500)), config)
@@ -88,6 +89,10 @@ from isss_proc import Stream
 stream = Stream(config, context=200)
 driver = SonarDriver(config, lambda ping: handle(stream.push_packet(ping.raw).points()))
 ```
+
+In ROS, `isss_cloud_node` (in `isss_ros2_driver`) does the same from
+`isss/raw`, converting messages with `isss.sources.pings_from_message_fields`
+and publishing `sensor_msgs/PointCloud2` packed by `isss_proc.cloud`.
 
 ## Stages
 
@@ -136,7 +141,8 @@ the original scripts.
 src/isss_proc/
   swath.py     Swath: pings + calibration; slant range and depression
   filters.py   the stages
-  pipeline.py  Pipeline, Result, Stream (live), viewer_keep (isss-proc-view)
+  pipeline.py  Pipeline, Result, Stream (live), viewer_keep (isss-proc-view), make_pipeline
+  cloud.py     kept returns packed as PointCloud2 data (numpy only; the ROS node fills the message)
   cli.py       isss-proc, isss-proc-view
 tests/
 ```
@@ -145,4 +151,4 @@ tests/
 
 `uv run pytest`, on synthetic pings from `isss.sim`: each stage on a case it
 must catch and one it must leave alone, batch and streaming agree, the
-viewer and the commands run headless.
+viewer and the commands run headless, the PointCloud2 layout reads back.

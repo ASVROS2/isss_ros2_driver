@@ -30,21 +30,12 @@ def filter_args(parser: argparse.ArgumentParser) -> None:
 
 
 def pipeline_from(args: argparse.Namespace):
-    from isss_proc.filters import BiasStates, CrossTalk, FirstSurface, IntensityExcess, MostProbableAngle, RangeGate
-    from isss_proc.pipeline import Pipeline
+    from isss_proc.pipeline import make_pipeline
 
-    stages = [RangeGate(args.min_range, args.max_range)]
-    if args.min_excess > 0:
-        stages.append(IntensityExcess(args.min_excess))
-    if args.crosstalk:
-        stages.append(CrossTalk(margin=args.crosstalk_margin))
-    if not args.no_bias_states:
-        stages.append(BiasStates())
-    if not args.no_first_surface:
-        stages.append(FirstSurface())
-    if args.mpaa:
-        stages.append(MostProbableAngle(pings=args.mpaa_pings, band_deg=args.mpaa_band))
-    return Pipeline(stages)
+    return make_pipeline(min_range=args.min_range, max_range=args.max_range, min_excess=args.min_excess,
+                         crosstalk=args.crosstalk, crosstalk_margin=args.crosstalk_margin,
+                         bias_states=not args.no_bias_states, first_surface=not args.no_first_surface,
+                         mpaa=args.mpaa, mpaa_pings=args.mpaa_pings, mpaa_band=args.mpaa_band)
 
 
 def main_view(argv: list[str] | None = None) -> None:

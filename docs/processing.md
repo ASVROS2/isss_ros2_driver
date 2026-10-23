@@ -13,7 +13,8 @@ the protocol and phase model are in [protocol.md](protocol.md).
  .bin log + sidecar ──────┤                                                  ┌─ Python: Result.points(), .npz
  .nc export ──────────────┼─► PingArrays + SonarConfig ─► Swath ─► Pipeline ─┤
  old-driver bag ──────────┤      (isss.sources.load_pings)        (stages)   ├─ isss-proc-view (sensor frame)
- older formats (planned) ─┘                                                  └─ ROS node: PointCloud2 (planned)
+ isss_msgs/ISSS ──────────┤                                                  └─ ROS node: PointCloud2
+ older formats (planned) ─┘
 ```
 
 - **Everything becomes `PingArrays` first.** Intensity and signed phase counts per
@@ -42,7 +43,7 @@ the protocol and phase model are in [protocol.md](protocol.md).
 |---|---|---|
 | `isss_core` (`isss`) | Protocol, driver, logs, readers and converters of every format, diagnostics, the viewer | stdlib; numpy/matplotlib/h5netcdf optional |
 | `isss_proc` | Stages, pipeline, streaming, processing CLIs; later georeferencing and gridding | `isss_core`, numpy, scipy |
-| `isss_ros2_driver` | ROS wrappers: the driver node now, the processing node next | `isss_core`, `isss_proc`, rclpy |
+| `isss_ros2_driver` | ROS wrappers: the driver node and the processing node (`isss_cloud_node`) | `isss_core`, `isss_proc`, rclpy |
 | `isss_msgs` | Messages | |
 
 The viewer stays in `isss_core` and takes a `keep` callable, so it has no
@@ -55,7 +56,7 @@ dependency on `isss_proc`; `isss-proc-view` plugs the pipeline in.
 | `.bin` logs with sidecar (2026 onwards) | this driver | read |
 | Aug 2025 stick `.bin` logs, no sidecar | earlier logger | read |
 | Dec 2025 Beckholmen bags, `smarc_msgs/ISSS` | old C++ driver, ROS 2 | read (`isss.bag`): the packet header and exact phase word survive in the message |
-| Bags of this driver, `isss_msgs/ISSS` | ROS 2 node | **to do**: a reader from the message fields (counts and header values are all there) |
+| Bags of this driver, `isss_msgs/ISSS` | ROS 2 node | **to do**: the conversion from message fields exists (`isss.sources.pings_from_message_fields`, `config_from_message_fields`; `size_field` is not in the message and reads 0); `load_pings` still needs to read the bags |
 | Askö Oct 2024 ROS 1 bags (`port_channel_phase_15_8` / `_7_0` byte fields) | older driver | **to do**: needs a ROS 1 reader (`rosbags`). The messages carry no decimation, so the range must be given. The MPAA scripts were tuned on these, with DVL altitude |
 | July 2024 logs, phase outside ±10240 | older driver | **to do**: the encoding differs; understand it before converting (`isss-report` flags it) |
 | `.npy` dumps of the 2024 scripts (`*_raw_isss.npy`) | `py_files/parse_ros_bag.py` | Prefer the bags. The dumps can be read if needed: their signed conversion subtracted 65535, not 65536, which is recoverable |
@@ -74,12 +75,14 @@ tested against a few pings decoded by hand, as `test_netcdf.py` does for bags.
 2. **Time per ping.** `PingArrays` carries the device counter only; readers
    already know UTC (`netcdf.read_netcdf` drops it). Add `time` to `PingArrays`
    so that processing can attach navigation.
-3. **ROS processing node** in `isss_ros2_driver`: subscribe to `isss/raw`,
-   convert `isss_msgs/ISSS` to `PingArrays` (the same function as the bag reader
-   above), push to a `Stream` every few pings, publish `sensor_msgs/PointCloud2`
-   in the message's `frame_id` (x along-track = 0, y, z, intensity, side,
-   range). TF and RViz then place it in the world. The default chain plus MPAA takes about 50 ms for a
-   200-ping window on a laptop, so process in blocks of a few pings, not per ping.
+3. **ROS processing node (done):** `isss_cloud_node` in `isss_ros2_driver`
+   ([Readme](../Readme.md#processing-node-isss_cloud_node)). It converts each
+   `isss_msgs/ISSS` with `isss.sources.pings_from_message_fields`, builds the
+   `SonarConfig` from the calibration in the message, pushes `block` pings (5) at a time
+   to a `Stream` (`make_pipeline` builds the chain from the same options as `isss-proc`)
+   and publishes one `PointCloud2` per ping in its `frame_id` and stamp (x = 0,
+   y, z, intensity, range, side; layout in `isss_proc.cloud`). TF and RViz then
+   place it in the world. Not yet run against the sonar or a bag.
 4. **Georeferencing** in `isss_proc`: pose per ping from navigation (interpolated
    on UTC), lever arm and mount from TF or a config, sensor frame to world.
    sonar3d_reference has the pose handling for the Beckholmen bags; the 2024
