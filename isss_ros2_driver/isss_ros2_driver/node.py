@@ -77,9 +77,9 @@ class IsssDriverNode(Node):
         self._status_pub = self.create_publisher(ISSSStatus, 'isss/status', 10)
         self._diagnostics_pub = self.create_publisher(DiagnosticArray, '/diagnostics', 1)
 
-        self.create_service(ConfigureSonar, '~/configure_sonar', self._handle_configure)
-        self.create_service(Trigger, '~/start_logging', self._handle_start_logging)
-        self.create_service(Trigger, '~/stop_logging', self._handle_stop_logging)
+        self.create_service(ConfigureSonar, 'isss/configure_sonar', self._handle_configure)
+        self.create_service(Trigger, 'isss/start_logging', self._handle_start_logging)
+        self.create_service(Trigger, 'isss/stop_logging', self._handle_stop_logging)
         self.create_timer(1.0, self._publish_status)
 
         self._driver = SonarDriver(

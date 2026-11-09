@@ -101,14 +101,16 @@ the parameters of `cloud_config_file`.
 
 ### Services
 
+Names are relative, so they sit under the launch `namespace` next to the topics (`/<namespace>/isss/configure_sonar`).
+
 | Service | Type | Description |
 |---|---|---|
-| `~/configure_sonar` | `isss_msgs/ConfigureSonar` | Runtime range / sample / phase configuration |
-| `~/start_logging` | `std_srvs/Trigger` | Start a new raw `.bin` log in `save_path` |
-| `~/stop_logging` | `std_srvs/Trigger` | Stop logging |
+| `isss/configure_sonar` | `isss_msgs/ConfigureSonar` | Runtime range / sample / phase configuration |
+| `isss/start_logging` | `std_srvs/Trigger` | Start a new raw `.bin` log in `save_path` |
+| `isss/stop_logging` | `std_srvs/Trigger` | Stop logging |
 
 ```bash
-ros2 service call /isss_ros2_driver_node/configure_sonar isss_msgs/srv/ConfigureSonar "{range: 30.0, num_samples: 1000, num_phases: 2}"
+ros2 service call /isss/configure_sonar isss_msgs/srv/ConfigureSonar "{range: 30.0, num_samples: 1000, num_phases: 2}"
 ```
 
 ### Parameters
@@ -192,6 +194,8 @@ The C++ source is kept in [`legacy/cpp_driver/`](legacy/cpp_driver) and under th
   `counts_per_unit_sine` and `boresight_depression_deg`.
 - The status message and service moved to `isss_msgs`
   (e.g. `isss_msgs/srv/ConfigureSonar`).
+- Services moved from `<namespace>/isss_ros2_driver_node/<name>` to `<namespace>/isss/<name>`,
+  beside the topics.
 - `ros2 run isss_ros2_driver plot_isss.py` is replaced by `isss-report` and `isss-view` from `isss_core`.
 
 With `save_path` set, logging now starts at launch even if the first connection
