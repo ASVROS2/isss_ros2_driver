@@ -17,3 +17,6 @@ venv/
 .vscode/
 *.swp
 .DS_Store
+
+# isss-bench output (-o bench_<date>_<name>/)
+bench_*/
