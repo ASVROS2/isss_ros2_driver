@@ -8,7 +8,7 @@ version = "0.2.0"
 description = "Python interface for the DeepVision Interferometric Side Scan Sonar (ISSS)"
 readme = "README.md"
 license = {text = "MIT"}  # table form: older setuptools (colcon builds) rejects the string form
-requires-python = ">=3.9"
+# requires-python omitted on purpose: setuptools 68 turns it into a SpecifierSet that colcon-python-setup-py cannot parse (Python >= 3.9 assumed)
 authors = [{ name = "KTH SMaRC" }, { name = "Julian Valdez", email = "jvaldez@kth.se" }]
 keywords = ["sonar", "sidescan", "deepvision", "isss", "interferometry"]
 classifiers = [
