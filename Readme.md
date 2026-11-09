@@ -18,6 +18,32 @@ All sensor behaviour lives in `isss_core`; the ROS node only translates. A chang
 to how the sonar is handled goes in `isss_core` with a test, and the node picks it
 up.
 
+## Connecting the sonar
+
+| | |
+|---|---|
+| Sonar IP | **`192.168.2.62`** |
+| Port | `57349`, TCP |
+| Subnet | `192.168.2.0/24` (netmask `255.255.255.0`) |
+
+The sonar sits at a fixed address, so the host has to come to it. Give the
+network port the sonar is plugged into a **static** address on `192.168.2.0/24`
+that is not `.62`, for example `192.168.2.10/24`, with no gateway. A port that
+already carries another network (a vessel LAN, say) needs its own subnet, so use
+a separate port or a USB Ethernet adapter. Example with NetworkManager:
+
+```bash
+nmcli connection add type ethernet ifname <iface> con-name isss ipv4.method manual ipv4.addresses 192.168.2.10/24
+nmcli connection up isss
+ping 192.168.2.62
+```
+
+Wait about a minute after power-on: ping can answer before TCP connections do.
+Every tool defaults to this address (`isss-stream --ip`, `isss-view --ip`,
+`isss-bench --ip`, and the node's `ip` parameter); pass another one only if your
+unit has been reconfigured. More in [`docs/bench-testing.md`](docs/bench-testing.md)
+and [`docs/protocol.md`](docs/protocol.md).
+
 ## Bench work (no ROS)
 
 ```bash
@@ -41,7 +67,8 @@ See [`isss_core/README.md`](isss_core/README.md) for the Python API.
 
 ```bash
 cd ~/ros2_ws/src && git clone https://github.com/ASVROS2/isss_ros2_driver.git
-cd ~/ros2_ws && colcon build --packages-up-to isss_ros2_driver
+cd ~/ros2_ws && rosdep install --from-paths src/isss_ros2_driver --ignore-src -y   # pulls python3-h5py
+colcon build --packages-up-to isss_ros2_driver
 source install/setup.bash
 ros2 launch isss_ros2_driver isss_driver.launch.py
 ```
