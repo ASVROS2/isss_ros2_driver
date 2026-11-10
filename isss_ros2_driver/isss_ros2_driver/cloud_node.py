@@ -13,10 +13,11 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2, PointField
 
-from isss.sources import config_from_message_fields, pings_from_message_fields
 from isss_msgs.msg import ISSS
 from isss_proc import Stream, make_pipeline
 from isss_proc.cloud import POINT_FIELDS, POINT_STEP, pack_points
+
+from isss_ros2_driver.messages import config_key, ping_arrays, sonar_config
 
 NODE_NAME = 'isss_cloud_node'
 
@@ -68,7 +69,7 @@ class IsssCloudNode(Node):
 
     def _on_ping(self, msg: ISSS) -> None:
         # A block holds pings of one configuration; a change processes what came before it
-        if self._pending and _key(msg) != _key(self._pending[0]):
+        if self._pending and config_key(msg) != config_key(self._pending[0]):
             self._process()
         self._pending.append(msg)
         if len(self._pending) >= self._block:
@@ -77,26 +78,11 @@ class IsssCloudNode(Node):
     def _process(self) -> None:
         msgs, self._pending = self._pending, []
         first = msgs[0]
-        config = config_from_message_fields(
-            range=first.range,
-            num_samples=len(first.port_intensity),
-            sound_velocity=first.sound_velocity,
-            counts_per_unit_sine=first.counts_per_unit_sine,
-            boresight_depression=first.boresight_depression,
-            port_phase_sign=first.port_phase_sign,
-            starboard_phase_sign=first.starboard_phase_sign,
-        )
+        config = sonar_config(first)
         if self._stream is None or config != self._stream.config:
             self._stream = Stream(config, self._pipeline, context=self._context)
         try:
-            arrays = pings_from_message_fields(
-                [m.ping_time for m in msgs],
-                [m.decimation for m in msgs],
-                [m.port_intensity for m in msgs],
-                [m.starboard_intensity for m in msgs],
-                [m.port_phase_counts for m in msgs],
-                [m.starboard_phase_counts for m in msgs],
-            )
+            arrays = ping_arrays(msgs)
         except ValueError as exc:
             self.get_logger().warn(f'Dropping {len(msgs)} pings: {exc}', throttle_duration_sec=5.0)
             return
@@ -119,11 +105,6 @@ class IsssCloudNode(Node):
         cloud.data = array('B', pack_points(points))
         cloud.is_dense = True
         return cloud
-
-
-def _key(msg: ISSS) -> tuple:
-    return (len(msg.port_intensity), msg.decimation, msg.range, msg.sound_velocity, msg.counts_per_unit_sine,
-            msg.boresight_depression, msg.port_phase_sign, msg.starboard_phase_sign)
 
 
 def _validate(p: dict) -> None:

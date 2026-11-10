@@ -7,7 +7,7 @@ sensor can be developed and bench-tested without ROS:
 |---|---|---|
 | [`isss_core/`](isss_core) | Python package `isss`: protocol, TCP client, driver loop (reconnect, logging, statistics), log reader, simulator, diagnostic report and viewer, command-line tools. **No ROS dependency.** | `uv` on any machine; also a colcon `ament_python` package |
 | [`isss_proc/`](isss_proc) | Python package `isss_proc`: processing. Filter stages (intensity, phase bias states, first surface, MPAA) over a log or live pings, `isss-proc`, `isss-proc-view`. **No ROS dependency.** Structure and plan: [`docs/processing.md`](docs/processing.md) | `uv`; also colcon `ament_python` |
-| [`isss_ros2_driver/`](isss_ros2_driver) | Thin rclpy node around `isss.SonarDriver`: parameters, `isss_msgs/ISSS`, status, services | colcon |
+| [`isss_ros2_driver/`](isss_ros2_driver) | Thin rclpy node around `isss.SonarDriver`: parameters, `isss_msgs/ISSS`, status, services; `isss_cloud_node` (filtered clouds) and `isss_ros_view` (live viewer of the topic) | colcon |
 | [`isss_msgs/`](isss_msgs) | `ISSS.msg` (one ping), `ISSSStatus.msg`, `ConfigureSonar.srv` | colcon |
 | [`docs/protocol.md`](docs/protocol.md) | The protocol, log files, the phase-to-depression model, what has been checked against data, and open questions | |
 | [`docs/bench-testing.md`](docs/bench-testing.md) | How to bench-test a sonar with `isss-bench`, and what to check by hand | |
@@ -90,6 +90,19 @@ ros2 launch isss_ros2_driver isss_driver.launch.py namespace:=isss_stick ip:=192
 `cloud:=true` also starts the processing node (`isss_cloud_node`, below), with
 the parameters of `cloud_config_file`.
 
+[`launch/isss.launch.yaml`](isss_ros2_driver/launch/isss.launch.yaml) does the
+same in YAML, with every parameter of both nodes written inline, as a template
+to copy into a vehicle bringup. Arguments: `namespace`, `ip`, `range`,
+`save_path`, `frame_id`, `cloud` (default `true`), and the mount:
+`parent_frame` with `x y z` [m] and `roll pitch yaw` [rad]. With a
+`parent_frame`, a `static_transform_publisher` places `frame_id` on it; empty
+(the default) publishes no transform, for vehicles whose description already does.
+
+```bash
+ros2 launch isss_ros2_driver isss.launch.yaml namespace:=isss_stick save_path:=/tmp/isss_logs/
+ros2 launch isss_ros2_driver isss.launch.yaml parent_frame:=base_link x:=0.5 z:=-0.3
+```
+
 ### Published topics
 
 | Topic (relative) | Default FQN | Type | Description |
@@ -132,7 +145,7 @@ Defined in [`isss_ros2_driver/config/isss_driver.yaml`](isss_ros2_driver/config/
 | `boresight_depression_deg` | double | `44.5` | Depression of zero phase (includes the mount tilt) |
 | `port_phase_sign` | int | `1` | `-1` if the port transducer is mounted upside down; see [phase model](docs/protocol.md#phase-and-depression) |
 | `starboard_phase_sign` | int | `1` | The same for starboard |
-| `use_device_time` | bool | `true` | Stamp messages with the device ping counter |
+| `use_device_time` | bool | `false` | `true`: stamp with the device ping counter (uptime since the sonar booted, not wall time). `false`: receive time on the host; the device counter stays in `ping_time` |
 | `device_time_offset_sec` | double | `0.0` | Added to device time when stamping |
 | `reconnect_interval_sec` | double | `5.0` | Delay between reconnect attempts |
 | `recv_timeout_sec` | int | `2` | Socket receive timeout |
@@ -167,6 +180,40 @@ the filters are described in [`isss_proc`](isss_proc/README.md#stages).
 | `mpaa` | bool | `false` | Add the most-probable-angle filter at the end |
 | `mpaa_pings` | int | `1` | Pings pooled per MPAA bin |
 | `mpaa_band` | double | `3.0` | Keep returns this close to the bin's mode [deg] |
+
+### Utility: live viewer (`isss_ros_view`)
+
+The `isss-view` window on a running driver's `isss/raw` topic. It is a
+subscriber, so it runs next to the driver and never opens its own connection to
+the sonar (`isss-view --ip` does, and must not run while the driver is
+connected). The phase model comes from the messages; keys and panels are those
+of `isss-view` ([`isss_core`](isss_core/README.md#diagnose-a-log-or-a-live-sonar)).
+It is a diagnostic tool, not part of the launch.
+
+```bash
+ros2 run isss_ros2_driver isss_ros_view                                 # /isss/raw
+ros2 run isss_ros2_driver isss_ros_view --filters --min-excess 20       # with the isss-proc-view filter overlay
+ros2 run isss_ros2_driver isss_ros_view --ros-args -r __ns:=/isss_stick  # a namespaced driver
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--topic` | `isss/raw` | ISSS topic; relative names follow the node namespace |
+| `--keep` | `600` | Pings kept in the waterfall |
+| `--filters` | off | Overlay the processing filters, as `isss-proc-view` does; the filter options (`--min-excess`, `--mpaa`, ...) are those of `isss-proc-view`, listed by `--help` |
+| `--trail` | `50` | With `--filters`: pings shown in the profile |
+
+The three viewers share one window and live loop (`isss.viz.run_live`) and
+differ only in where pings come from:
+
+| Command | Source | Use |
+|---|---|---|
+| `isss-view <log>` / `isss-proc-view <log>` | `.bin`, `.nc` or bag | Offline |
+| `isss-view --ip` / `isss-proc-view --ip` | TCP to the sonar (`isss.diagnostics.SonarSource`) | Bench, **without** the ROS driver |
+| `isss_ros_view` | `isss/raw` topic (`isss_ros2_driver.view_node.TopicSource`) | With the ROS driver running |
+
+If it keeps printing `Still nothing on /isss/raw`, the viewer and driver are on
+different middlewares or domains (`RMW_IMPLEMENTATION`, `ROS_DOMAIN_ID`).
 
 ### Message (`isss_msgs/ISSS`)
 

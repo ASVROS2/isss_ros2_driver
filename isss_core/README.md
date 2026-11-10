@@ -124,6 +124,13 @@ expected there. All tools take `--k`, `--boresight`, `--flip-port`,
 `--flip-starboard` and `--sound-velocity` to try another calibration.
 `PingViewer` takes a `keep` mask function and a `trail`; `isss-proc-view` in
 [`../isss_proc`](../isss_proc) uses them to show what its filters keep.
+Live viewing goes through `isss.viz.run_live(source, title=...)`, where a source
+has `config`, `start`, `stop`, `len`, `arrays` and optionally `finished` (true
+closes the window): `isss.diagnostics.SonarSource`
+is the sonar over TCP (`--ip`), and the ROS package's `isss_ros_view` passes one
+fed by the `isss/raw` topic, so all live viewers share one window and loop.
+`isss-view --ip` opens its own connection to the sonar: don't run it while the
+ROS driver is connected.
 
 ### Run the driver loop
 

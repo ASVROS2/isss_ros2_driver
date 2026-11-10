@@ -124,6 +124,33 @@ class PacketBuffer:
         return decode_packets(packets, samples)
 
 
+class SonarSource:
+    """A live sonar as a source for ``isss.viz.run_live``: a ``SonarDriver`` fills a ``PacketBuffer``.
+
+    A source has a ``config``, ``start``/``stop``, ``len`` (pings held) and
+    ``arrays``. The ROS package has the other one, fed by an ``isss/raw`` topic.
+    """
+
+    def __init__(self, config: SonarConfig, keep: int = 600) -> None:
+        from isss.driver import SonarDriver
+
+        self.config = config
+        self.buffer = PacketBuffer(keep)
+        self._driver = SonarDriver(config, lambda ping: self.buffer.add(ping.raw))
+
+    def start(self) -> None:
+        self._driver.start()
+
+    def stop(self) -> None:
+        self._driver.stop()
+
+    def __len__(self) -> int:
+        return len(self.buffer)
+
+    def arrays(self) -> PingArrays:
+        return self.buffer.arrays()
+
+
 def load_log(
     path: str | Path,
     *,

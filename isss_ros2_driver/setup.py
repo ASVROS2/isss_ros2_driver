@@ -11,7 +11,7 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', [f'resource/{PACKAGE}']),
         (f'share/{PACKAGE}', ['package.xml']),
-        (f'share/{PACKAGE}/launch', glob('launch/*.launch.py')),
+        (f'share/{PACKAGE}/launch', glob('launch/*.launch.py') + glob('launch/*.launch.yaml')),
         (f'share/{PACKAGE}/config', glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
@@ -23,6 +23,7 @@ setup(
         'console_scripts': [
             'isss_ros2_driver_node = isss_ros2_driver.node:main',
             'isss_cloud_node = isss_ros2_driver.cloud_node:main',
+            'isss_ros_view = isss_ros2_driver.view_node:main',
         ],
     },
 )

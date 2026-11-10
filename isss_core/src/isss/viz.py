@@ -510,3 +510,43 @@ class PingViewer:
             if self.follow:
                 self.index = max(self.arrays.n_pings - 1, 0)
             self._draw_ping()
+
+
+def run_live(source, *, title: str, interval_ms: int = 250, **viewer_kwargs) -> None:
+    """Show ``PingViewer`` on a live source until the window closes.
+
+    ``source`` is ``isss.diagnostics.SonarSource`` (a sonar over TCP, ``isss-view
+    --ip``) or the ROS package's topic source (``isss_ros_view``); both have
+    ``config``, ``start``, ``stop``, ``len`` and ``arrays``. ``start`` may block
+    until the source knows its ``config``; a ``finished`` attribute that turns
+    true closes the window (the ROS source sets it on shutdown, as rclpy takes
+    over Ctrl-C). ``viewer_kwargs`` go to ``PingViewer`` (``keep`` and ``trail``
+    for the processing filters).
+    """
+    import signal
+    import threading
+
+    # Ctrl-C raised inside a GUI callback is printed and swallowed, so take it as a flag instead
+    # (after start, which may block waiting for the source and keeps the usual Ctrl-C meanwhile)
+    interrupted = threading.Event()
+    previous = None
+    source.start()
+    try:
+        if threading.current_thread() is threading.main_thread():
+            previous = signal.signal(signal.SIGINT, lambda *_: interrupted.set())
+        viewer = PingViewer(source.arrays(), source.config, title=title, live=True, **viewer_kwargs)
+
+        def refresh() -> None:
+            if interrupted.is_set() or getattr(source, "finished", False):
+                plt.close(viewer.fig)
+            elif len(source):
+                viewer.set_arrays(source.arrays())
+
+        timer = viewer.fig.canvas.new_timer(interval=interval_ms)
+        timer.add_callback(refresh)
+        timer.start()
+        plt.show()
+    finally:
+        source.stop()
+        if previous is not None:
+            signal.signal(signal.SIGINT, previous)

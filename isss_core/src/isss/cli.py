@@ -239,23 +239,8 @@ def run_viewer(parser: argparse.ArgumentParser, args: argparse.Namespace, **view
         plt.show()
         return
 
-    from isss.diagnostics import PacketBuffer
-    from isss.driver import SonarDriver
+    from isss.diagnostics import SonarSource
+    from isss.viz import run_live
 
     config = config_from(args, ip=args.ip, port=args.port, range_m=args.range_m)
-    buffer = PacketBuffer(args.keep)
-    driver = SonarDriver(config, lambda ping: buffer.add(ping.raw))
-    viewer = PingViewer(buffer.arrays(), config, title=f"{args.ip}:{args.port}", live=True, **viewer_kwargs)
-
-    def refresh() -> None:
-        if len(buffer):
-            viewer.set_arrays(buffer.arrays())
-
-    timer = viewer.fig.canvas.new_timer(interval=250)
-    timer.add_callback(refresh)
-    timer.start()
-    driver.start()
-    try:
-        plt.show()
-    finally:
-        driver.stop()
+    run_live(SonarSource(config, args.keep), title=f"{args.ip}:{args.port}", **viewer_kwargs)

@@ -145,3 +145,47 @@ def test_viewer_takes_another_mask_and_a_trail():
 
     assert offsets(SIDE_COLORS[PORT]) == []  # port is dropped by the mask...
     assert any((o[:, 0] < 0).any() for o in offsets(GRID))  # ...and its strong returns show in grey
+
+
+def test_run_live_starts_shows_and_stops_a_source():
+    from isss.viz import run_live
+
+    class Source:
+        config = SonarConfig()
+        calls = []
+        finished = True  # closes the window at the first refresh
+
+        def start(self):
+            self.calls.append("start")
+
+        def stop(self):
+            self.calls.append("stop")
+
+        def __len__(self):
+            return 30
+
+        def arrays(self):
+            return _arrays()
+
+    source = Source()
+    run_live(source, title="test")  # Agg: show returns at once
+    assert source.calls == ["start", "stop"]
+
+
+def test_sonar_source_from_simulator():
+    import time
+
+    from isss.diagnostics import SonarSource
+    from isss.sim import SimulatedSonar
+
+    with SimulatedSonar(rate_hz=100) as sim:
+        config = SonarConfig(ip="127.0.0.1", port=sim.port, recv_timeout_sec=1.0, reconnect_interval_sec=0.1)
+        source = SonarSource(config, keep=10)
+        source.start()
+        try:
+            deadline = time.monotonic() + 3
+            while len(source) < 10 and time.monotonic() < deadline:
+                time.sleep(0.02)
+        finally:
+            source.stop()
+    assert len(source) == 10 and source.arrays().n_pings == 10

@@ -1,0 +1,82 @@
+# Driver (+ optional cloud node) with every parameter inline, for copying into
+# a vehicle bringup and editing in one place. Parameter meanings: Readme.md.
+#
+#   ros2 launch isss_ros2_driver isss.launch.yaml
+#   ros2 launch isss_ros2_driver isss.launch.yaml namespace:=isss_stick cloud:=false save_path:=/data/isss
+#   ros2 launch isss_ros2_driver isss.launch.yaml parent_frame:=base_link x:=0.5 z:=-0.3 pitch:=0.0
+launch:
+  - arg: {name: namespace, default: ""}
+  - arg: {name: ip, default: "192.168.2.62"}
+  - arg: {name: range, default: "20.0"}        # give a decimal (30.0, not 30): the parameter is a double
+  - arg: {name: save_path, default: ""}        # empty: no .bin logging
+  - arg: {name: frame_id, default: "isss_link"}
+  - arg: {name: cloud, default: "true"}        # also start isss_cloud_node
+  # Mount: a static transform parent_frame -> frame_id. Empty parent_frame: none
+  # (the vehicle's own description may publish it). Metres and radians.
+  - arg: {name: parent_frame, default: ""}
+  - arg: {name: x, default: "0.0"}
+  - arg: {name: y, default: "0.0"}
+  - arg: {name: z, default: "0.0"}
+  - arg: {name: roll, default: "0.0"}
+  - arg: {name: pitch, default: "0.0"}
+  - arg: {name: yaw, default: "0.0"}
+
+  - node:
+      pkg: isss_ros2_driver
+      exec: isss_ros2_driver_node
+      name: isss_ros2_driver_node
+      namespace: $(var namespace)
+      output: screen
+      param:
+        # Connection
+        - {name: ip, value: $(var ip)}
+        - {name: port, value: 57349}
+        - {name: recv_timeout_sec, value: 2}
+        - {name: reconnect_interval_sec, value: 5.0}
+        # Sonar configuration
+        - {name: range, value: $(var range)}
+        - {name: num_samples, value: 1000}
+        - {name: num_phases, value: 2}
+        # Logging
+        - {name: save_path, value: $(var save_path)}
+        - {name: export_netcdf, value: true}
+        # Phase model and geometry
+        - {name: frame_id, value: $(var frame_id)}
+        - {name: sound_velocity, value: 1440.9}
+        - {name: counts_per_unit_sine, value: 15218.0}
+        - {name: boresight_depression_deg, value: 44.5}
+        - {name: port_phase_sign, value: 1}          # -1: transducer mounted upside down
+        - {name: starboard_phase_sign, value: 1}
+        # Time: false stamps header with the host receive time; ping_time keeps the device counter
+        - {name: use_device_time, value: false}
+        - {name: device_time_offset_sec, value: 0.0}
+
+  - node:
+      if: $(var cloud)
+      pkg: isss_ros2_driver
+      exec: isss_cloud_node
+      name: isss_cloud_node
+      namespace: $(var namespace)
+      output: screen
+      param:
+        - {name: block, value: 5}
+        - {name: context, value: 200}
+        - {name: min_range, value: 1.0}
+        - {name: max_range, value: 0.0}           # 0: no limit
+        - {name: min_excess, value: 30.0}         # 0 disables the stage
+        - {name: bias_states, value: true}
+        - {name: first_surface, value: true}
+        - {name: mpaa, value: false}
+        - {name: mpaa_pings, value: 1}
+        - {name: mpaa_band, value: 3.0}           # [deg]
+
+  - node:
+      if: $(eval "'$(var parent_frame)' != ''")
+      pkg: tf2_ros
+      exec: static_transform_publisher
+      name: isss_mount_tf
+      namespace: $(var namespace)
+      args: >-
+        --x $(var x) --y $(var y) --z $(var z)
+        --roll $(var roll) --pitch $(var pitch) --yaw $(var yaw)
+        --frame-id $(var parent_frame) --child-frame-id $(var frame_id)

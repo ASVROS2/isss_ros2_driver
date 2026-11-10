@@ -39,7 +39,7 @@ PARAMETERS = {
     'port_phase_sign': 1,
     'starboard_phase_sign': 1,
     'recv_timeout_sec': 2,
-    'use_device_time': True,
+    'use_device_time': False,  # header.stamp = receive time; ping_time keeps the device counter (uptime, not wall time)
     'device_time_offset_sec': 0.0,
     'reconnect_interval_sec': 5.0,
 }
