@@ -73,6 +73,6 @@ Some things need a person:
 - **Power cycle.** Power the sonar off and on while `isss-view` runs; note
   whether it resumes and whether the configuration and the ping counter reset
   (then rerun the "configuration across connections" and "device clock" steps).
-- **ROS node.** On a ROS machine: `colcon test --packages-select isss_core isss_ros2_driver`,
+- **ROS node.** On a ROS machine: `colcon test --packages-select isss_core isss_proc isss_ros2_driver`,
   then launch the node against the sonar and check `ros2 topic hz /isss/raw`
   against the bench's ping rate and `ros2 topic echo /isss/status`.

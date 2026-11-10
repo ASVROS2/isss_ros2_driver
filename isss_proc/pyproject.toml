@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Processing of DeepVision ISSS pings: filters from phase and intensity to trusted soundings"
 readme = "README.md"
 license = {text = "MIT"}  # table form: older setuptools (colcon builds) rejects the string form
-# requires-python omitted on purpose: setuptools 68 turns it into a SpecifierSet that colcon-python-setup-py cannot parse (Python >= 3.9 assumed)
+requires-python = ">=3.9"  # setup.py keeps it readable for colcon (see _Distribution there)
 authors = [{ name = "KTH SMaRC" }, { name = "Julian Valdez", email = "jvaldez@kth.se" }]
 keywords = ["sonar", "sidescan", "deepvision", "isss", "interferometry", "bathymetry"]
 dependencies = [
@@ -40,3 +40,5 @@ packages = ["src/isss_proc"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# ROS's launch_testing plugin (colcon test) turns one module-level skip into skipping every test
+addopts = "-p no:launch_testing -p no:launch_ros"
