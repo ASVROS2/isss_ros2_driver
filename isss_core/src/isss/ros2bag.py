@@ -9,12 +9,17 @@ so a bag needs no calibration options. ``header.stamp`` is the host's receive
 time (with the driver's default ``use_device_time: false``; ``fit_clock`` assumes it) and ``ping_time`` the
 sonar's counter; ``fit_clock`` combines the two into one time per ping.
 
+The driver's ``isss/settings`` and the cloud node's ``isss/cloud_settings``
+(JSON on latched ``std_msgs/String`` topics) hold every other setting;
+``read_settings`` returns them.
+
 Bags of the old C++ driver (``smarc_msgs/ISSS``) are read by ``isss.bag``;
 ``bag_kind`` tells the two apart.
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import struct
 from dataclasses import dataclass
@@ -27,6 +32,8 @@ from isss.bag import LEGACY_TYPE, CdrReader
 from isss.config import SonarConfig
 
 ISSS_TYPE = "isss_msgs/msg/ISSS"
+STRING_TYPE = "std_msgs/msg/String"
+SETTINGS_FORMAT = "isss-ros-settings"
 _WRAP = 2**32
 
 
@@ -145,20 +152,47 @@ def iter_pings(bag: str | Path, topic: str | None = None) -> Iterator[BagPing]:
         if len(topics) != 1:
             raise ValueError(f"{bag}: expected one {ISSS_TYPE} topic, found {topics or 'none'}; pass topic=")
         topic = topics[0]
+    for data in _messages(bag, topic, ISSS_TYPE):
+        yield parse_isss(data)
+
+
+def read_settings(bag: str | Path) -> dict[str, list[dict]]:
+    """``{topic: [settings, ...]}`` of the bag's settings topics, in record order.
+
+    A settings message is JSON on a ``std_msgs/String`` topic with
+    ``"format": "isss-ros-settings"``; the driver publishes one at start and on
+    every change, the cloud node one at start.
+    """
+    found: dict[str, list[dict]] = {}
+    for topic, msg_type in sorted(topic_types(bag).items()):
+        if msg_type != STRING_TYPE:
+            continue
+        for data in _messages(bag, topic, STRING_TYPE):
+            r = CdrReader(data)
+            try:
+                settings = json.loads(r.string())
+            except ValueError:
+                break  # some other String topic
+            if not isinstance(settings, dict) or settings.get("format") != SETTINGS_FORMAT:
+                break
+            found.setdefault(topic, []).append(settings)
+    return found
+
+
+def _messages(bag: str | Path, topic: str, msg_type: str) -> Iterator[bytes]:
     for path in storage_files(bag):
         if path.suffix == ".db3":
             with _connect(path) as con:
                 row = con.execute("SELECT id, type FROM topics WHERE name = ?", (topic,)).fetchone()
                 if row is None:
                     continue
-                if row[1] != ISSS_TYPE:
-                    raise ValueError(f"{topic} is {row[1]}, not {ISSS_TYPE}")
+                if row[1] != msg_type:
+                    raise ValueError(f"{topic} is {row[1]}, not {msg_type}")
                 for (data,) in con.execute("SELECT data FROM messages WHERE topic_id = ? ORDER BY id", (row[0],)):
-                    yield parse_isss(data)
+                    yield data
         else:
             with _Mcap(path) as mcap:
-                for data in mcap.messages(topic, ISSS_TYPE):
-                    yield parse_isss(data)
+                yield from mcap.messages(topic, msg_type)
 
 
 def read_pings(bag: str | Path, topic: str | None = None) -> list[BagPing]:

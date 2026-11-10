@@ -321,6 +321,8 @@ def export_isss_bag(bag: str | Path, out: str | Path | None = None, topic: str |
                               np.array([p.ping_time for p in pings], dtype=np.int64))
     attrs = _source_attrs(bag, f"isss-export of rosbag2 {bag.name} (topic {topic or 'auto'})",
                           ros2bag.CLOCK_SOURCE, None)
+    settings = ros2bag.read_settings(bag)
+    attrs["ros_settings"] = json.dumps(settings) if settings else None
     out = Path(out) if out else bag.with_name(bag.name + ".nc")
     adjust = adjust or (lambda c: c)
 

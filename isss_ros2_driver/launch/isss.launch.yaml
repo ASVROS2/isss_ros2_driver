@@ -11,6 +11,9 @@ launch:
   - arg: {name: save_path, default: ""}        # empty: no .bin logging
   - arg: {name: frame_id, default: "isss_link"}
   - arg: {name: cloud, default: "true"}        # also start isss_cloud_node
+  # Water and mount (give decimals): published in every isss/raw message and on isss/settings
+  - arg: {name: sound_velocity, default: "1440.9"}          # [m/s]
+  - arg: {name: boresight_depression_deg, default: "45.0"}  # [deg] the mount angle
   # Mount: a static transform parent_frame -> frame_id. Empty parent_frame: none
   # (the vehicle's own description may publish it). Metres and radians.
   - arg: {name: parent_frame, default: ""}
@@ -42,9 +45,9 @@ launch:
         - {name: export_netcdf, value: true}
         # Phase model and geometry
         - {name: frame_id, value: $(var frame_id)}
-        - {name: sound_velocity, value: 1440.9}
+        - {name: sound_velocity, value: $(var sound_velocity)}
         - {name: counts_per_unit_sine, value: 15218.0}
-        - {name: boresight_depression_deg, value: 45.0}
+        - {name: boresight_depression_deg, value: $(var boresight_depression_deg)}
         - {name: port_phase_sign, value: 1}          # -1: transducer mounted upside down
         - {name: starboard_phase_sign, value: 1}
         # Time: false stamps header with the host receive time; ping_time keeps the device counter

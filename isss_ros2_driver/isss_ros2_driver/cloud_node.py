@@ -4,6 +4,8 @@ The processing lives in ``isss_proc`` and the message conversion in
 ``isss.sources``. This node only buffers ``isss_msgs/ISSS`` messages, pushes
 them to an ``isss_proc.Stream`` a block at a time, and publishes the kept
 returns of each ping as ``sensor_msgs/PointCloud2`` (layout: ``isss_proc.cloud``).
+Its parameters and filter chain go out once, as JSON on the latched
+``isss/cloud_settings`` topic.
 """
 
 from array import array
@@ -17,7 +19,7 @@ from isss_msgs.msg import ISSS
 from isss_proc import Stream, make_pipeline
 from isss_proc.cloud import POINT_FIELDS, POINT_STEP, pack_points
 
-from isss_ros2_driver.messages import config_key, ping_arrays, sonar_config
+from isss_ros2_driver.messages import SettingsPublisher, config_key, ping_arrays, sonar_config, versions
 
 NODE_NAME = 'isss_cloud_node'
 
@@ -63,6 +65,9 @@ class IsssCloudNode(Node):
                         for name, offset, datatype in POINT_FIELDS]
 
         self._cloud_pub = self.create_publisher(PointCloud2, 'isss/cloud', 10)
+        self._settings = SettingsPublisher(self, 'isss/cloud_settings',
+                                           versions('isss_proc', 'isss_ros2_driver'))
+        self._settings.publish({'parameters': p, 'stages': list(self._pipeline.names)})
         self.create_subscription(ISSS, 'isss/raw', self._on_ping, 50)
         self.get_logger().info(f'Filtering isss/raw with {", ".join(self._pipeline.names)} '
                                f'in blocks of {self._block} pings')

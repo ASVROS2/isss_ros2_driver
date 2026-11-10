@@ -2,7 +2,9 @@
 
 Everything about talking to the sonar lives in ``isss_core``. This node only maps
 parameters to a ``SonarConfig``, pings to ``isss_msgs/ISSS``, driver status to
-``ISSSStatus`` and ``/diagnostics``, and services to driver calls.
+``ISSSStatus`` and ``/diagnostics``, and services to driver calls. Every
+setting (parameters, the configuration and registers in effect, the calibration)
+is published as JSON on the latched ``isss/settings`` topic whenever it changes.
 """
 
 import math
@@ -16,9 +18,11 @@ from rclpy.time import Time
 from std_srvs.srv import Trigger
 
 from isss import NotConnectedError, Ping, SonarConfig, SonarDriver
-from isss.protocol import check_settings, sample_interval
+from isss.protocol import check_settings, compute_decimation, sample_interval
 from isss_msgs.msg import ISSS, ISSSStatus
 from isss_msgs.srv import ConfigureSonar
+
+from isss_ros2_driver.messages import SettingsPublisher, versions
 
 NODE_NAME = 'isss_ros2_driver_node'
 
@@ -53,6 +57,7 @@ class IsssDriverNode(Node):
             self.declare_parameter(name, default)
         p = {name: self.get_parameter(name).value for name in PARAMETERS}
         _validate(p)
+        self._parameters = p
 
         self._frame_id = p['frame_id']
         self._use_device_time = p['use_device_time']
@@ -76,6 +81,7 @@ class IsssDriverNode(Node):
         self._isss_pub = self.create_publisher(ISSS, 'isss/raw', 10)
         self._status_pub = self.create_publisher(ISSSStatus, 'isss/status', 10)
         self._diagnostics_pub = self.create_publisher(DiagnosticArray, '/diagnostics', 1)
+        self._settings = SettingsPublisher(self, 'isss/settings', versions('isss_core', 'isss_ros2_driver'))
 
         self.create_service(ConfigureSonar, 'isss/configure_sonar', self._handle_configure)
         self.create_service(Trigger, 'isss/start_logging', self._handle_start_logging)
@@ -90,6 +96,7 @@ class IsssDriverNode(Node):
             logger=self.get_logger(),
         )
         self._driver.start()
+        self._publish_settings()
 
     def destroy_node(self):
         self._driver.stop()
@@ -128,9 +135,39 @@ class IsssDriverNode(Node):
         seconds = ping_time_100us * 1e-4 + self._device_time_offset_sec
         return Time(nanoseconds=int(seconds * 1e9)).to_msg()
 
-    # Status
+    # Settings and status
+
+    def settings(self) -> dict:
+        """Everything a recording depends on: the parameters as given, and what is in effect now."""
+        c = self._driver.config
+        return {
+            'parameters': dict(self._parameters),
+            'sonar': {
+                'range_m': c.range_m,
+                'num_samples': c.num_samples,
+                'num_phases': c.num_phases,
+                'decimation': compute_decimation(c.range_m, c.num_samples),
+            },
+            'calibration': {
+                'sound_velocity': c.sound_velocity,
+                'counts_per_unit_sine': c.counts_per_unit_sine,
+                'boresight_depression_deg': c.boresight_depression_deg,
+                'port_phase_sign': c.port_phase_sign,
+                'starboard_phase_sign': c.starboard_phase_sign,
+            },
+            'time': {
+                'use_device_time': self._use_device_time,
+                'device_time_offset_sec': self._device_time_offset_sec,
+            },
+            # Empty until the sonar has been connected and configured once
+            'register_writes': [{'register': reg, 'value': value} for reg, value in self._driver.register_writes],
+        }
+
+    def _publish_settings(self) -> None:
+        self._settings.publish(self.settings())
 
     def _publish_status(self) -> None:
+        self._publish_settings()  # republishes only on a change (connect, reconfigure)
         state = self._driver.status()
         status = ISSSStatus()
         status.header.stamp = self.get_clock().now().to_msg()
@@ -184,6 +221,7 @@ class IsssDriverNode(Node):
             response.message = 'Failed to write sonar configuration registers'
         else:
             response.success, response.message = True, 'Sonar configured successfully'
+        self._publish_settings()  # the configuration is stored even when it did not reach the sonar
         return response
 
     def _handle_start_logging(self, _request, response):

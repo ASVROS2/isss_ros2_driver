@@ -175,7 +175,7 @@ is unknown; see the open questions in the protocol doc.
 - `test_sidecar.py`: sidecars describe their logs, segments on reconfiguration, older logs still load
 - `test_netcdf.py`: `.bin` and old-driver bag exports match the decoded pings, files split on reconfiguration, time from sidecar or stamps, calibration from sidecar and `.nc`, the driver exports each log on close
 - `test_sources.py`: pings and configuration from `isss_msgs/ISSS` message fields agree with the decoded packets
-- `test_ros2bag.py`: bags of this driver in MCAP (with and without summary, lz4) and sqlite3 read back in stamp order with their calibration; the clock fit removes jitter and survives a counter wrap and a reboot; export and the commands
+- `test_ros2bag.py`: bags of this driver in MCAP (with and without summary, lz4) and sqlite3 read back in stamp order with their calibration; the clock fit removes jitter and survives a counter wrap and a reboot; settings topics; export and the commands
 - `test_bench.py`: the bench passes on the simulator and catches a device that ignores a register
 - `test_packaging.py`: `pyproject.toml` (uv) and `setup.py`/`package.xml` (colcon) stay in step
 
@@ -191,7 +191,7 @@ src/isss/
   sidecar.py    The JSON sidecar next to each log
   netcdf.py     NetCDF4 export (isss-export) and reading it back
   sources.py    load_pings / load_recording: PingArrays (and calibration) from any recording (the one entry for readers)
-  ros2bag.py    isss_msgs/ISSS from rosbag2 bags of this driver (MCAP, sqlite3), and the clock fit
+  ros2bag.py    isss_msgs/ISSS and the settings topics from rosbag2 bags of this driver (MCAP, sqlite3), and the clock fit
   bag.py        Raw packets from rosbag2 bags of the old C++ driver
   bench.py      isss-bench
   sim.py        SimulatedSonar and the isss-sim command

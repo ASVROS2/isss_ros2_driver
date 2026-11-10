@@ -96,7 +96,8 @@ the parameters of `cloud_config_file`.
 [`launch/isss.launch.yaml`](isss_ros2_driver/launch/isss.launch.yaml) does the
 same in YAML, with every parameter of both nodes written inline, as a template
 to copy into a vehicle bringup. Arguments: `namespace`, `ip`, `range`,
-`save_path`, `frame_id`, `cloud` (default `true`), and the mount:
+`save_path`, `frame_id`, `cloud` (default `true`), `sound_velocity` (1440.9
+m/s), `boresight_depression_deg` (45.0, the mount angle), and the mount:
 `parent_frame` with `x y z` [m] and `roll pitch yaw` [rad]. With a
 `parent_frame`, a `static_transform_publisher` places `frame_id` on it; empty
 (the default) publishes no transform, for vehicles whose description already does.
@@ -113,7 +114,9 @@ ros2 launch isss_ros2_driver isss.launch.yaml parent_frame:=base_link x:=0.5 z:=
 | `isss/raw` | `/isss/raw` | `isss_msgs/ISSS` | One ping: intensity, phase counts, depression angles |
 | `isss/status` | `/isss/status` | `isss_msgs/ISSSStatus` | Connection state, ping rate, configuration (1 Hz) |
 | `/diagnostics` | `/diagnostics` | `diagnostic_msgs/DiagnosticArray` | Driver health |
+| `isss/settings` | `/isss/settings` | `std_msgs/String` (JSON, latched) | Every driver setting: the parameters as given, the sonar configuration, registers and calibration in effect, time stamping, software versions. Republished on any change |
 | `isss/cloud` | `/isss/cloud` | `sensor_msgs/PointCloud2` | From `isss_cloud_node`: the returns of one ping the filters keep, in the ping's `frame_id` and stamp |
+| `isss/cloud_settings` | `/isss/cloud_settings` | `std_msgs/String` (JSON, latched) | From `isss_cloud_node`: its parameters and filter chain |
 
 ### Recording for offline work
 
@@ -123,13 +126,18 @@ bytes 2–3, which are constant (6007) and of unknown meaning
 ([protocol.md](docs/protocol.md#open-questions)). Phase is the signed hardware
 counts, with nothing lost. Every message also holds the configuration it was
 taken with (range, sample interval, sound speed, K, boresight, phase signs).
-`num_phases` is only in `isss/status`, and the mount only in `/tf_static`, so
-record those too:
+Everything else is on the settings topics: `isss/settings` (all driver
+parameters, `num_phases`, the registers written, time stamping, versions) and
+`isss/cloud_settings` (the filters). They are latched, so a recording started
+after the driver still gets them. The mount is on `/tf_static`. Record all of it:
 
 ```bash
-ros2 bag record /isss/raw /isss/status /tf_static
-isss-export rosbag2_*/          # -> .nc, calibration from the messages
+ros2 bag record /isss/raw /isss/status /isss/settings /isss/cloud_settings /tf_static
+isss-export rosbag2_*/          # -> .nc, calibration from the messages, settings in ros_settings
 ```
+
+The settings are JSON (`"format": "isss-ros-settings"`), readable with
+`ros2 topic echo /isss/settings` or `isss.ros2bag.read_settings(bag)`.
 
 `header.stamp` is the host's receive time and `ping_time` the sonar's counter;
 `isss-export` fits one to the other. With `save_path` set, the driver also

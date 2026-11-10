@@ -224,3 +224,37 @@ def test_commands_take_new_bags_and_options_override_the_messages(tmp_path, caps
     assert _check_input(bag, legacy=False) is None
     assert "not a bag of the old" in _check_input(bag, legacy=True)
     capsys.readouterr()
+
+
+def _string_cdr(text):
+    c = _Cdr()
+    c.string(text)
+    return bytes(c.buf)
+
+
+def test_settings_topics_are_read_and_exported(tmp_path):
+    import json
+
+    bag = _sqlite_bag(tmp_path / "rosbag2_s", [_message(p, int(T0 * 1e9) + i) for i, p in enumerate(_packets(3))])
+    driver = {"format": "isss-ros-settings", "version": 1, "node": "/isss_ros2_driver_node",
+              "parameters": {"sound_velocity": 1450.0}, "sonar": {"num_phases": 2}}
+    reconfigured = {**driver, "sonar": {"num_phases": 0}}
+    con = sqlite3.connect(next(bag.glob("*.db3")))
+    con.execute("INSERT INTO topics VALUES (3, '/isss/settings', 'std_msgs/msg/String', 'cdr', '', '')")
+    con.execute("INSERT INTO topics VALUES (4, '/chatter', 'std_msgs/msg/String', 'cdr', '', '')")
+    for i, settings in enumerate((driver, reconfigured)):
+        con.execute("INSERT INTO messages (topic_id, timestamp, data) VALUES (3, ?, ?)",
+                    (i, _string_cdr(json.dumps(settings))))
+    con.execute("INSERT INTO messages (topic_id, timestamp, data) VALUES (4, 0, ?)", (_string_cdr("hello"),))
+    con.commit()
+    con.close()
+
+    from isss.ros2bag import read_settings
+
+    assert read_settings(bag) == {"/isss/settings": [driver, reconfigured]}  # /chatter is not settings
+    pytest.importorskip("h5netcdf")
+    xr = pytest.importorskip("xarray")
+    from isss.netcdf import export_isss_bag
+
+    [path] = export_isss_bag(bag)
+    assert json.loads(xr.open_dataset(path).attrs["ros_settings"]) == {"/isss/settings": [driver, reconfigured]}

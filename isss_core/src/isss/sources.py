@@ -138,7 +138,8 @@ def config_from_message_fields(
         num_samples=int(num_samples),
         sound_velocity=float(sound_velocity),
         counts_per_unit_sine=float(counts_per_unit_sine),
-        boresight_depression_deg=math.degrees(boresight_depression),
+        # float32 radians in the message: 5 decimals of a degree keep all it holds, without the 42.0000008 noise
+        boresight_depression_deg=round(math.degrees(boresight_depression), 5),
         port_phase_sign=int(port_phase_sign),
         starboard_phase_sign=int(starboard_phase_sign),
     )

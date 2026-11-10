@@ -375,6 +375,11 @@ class SonarDriver:
         except OSError:
             pass
 
+    @property
+    def register_writes(self) -> list[tuple[int, int]]:
+        """``(register, value)`` of the last configuration written to the sonar; empty before the first connect."""
+        return list(self._last_register_writes)
+
     def _note_setup(self, writes: list[tuple[int, int]]) -> None:
         self._last_register_writes = writes
         if self._log_writer is not None:
