@@ -64,7 +64,7 @@ def test_viewer_flips_one_side():
 
 def test_viewer_angle_readout():
     viewer = PingViewer(_arrays(), SonarConfig())
-    boresight = viewer.angles_at(math.cos(math.radians(44.5)), -math.sin(math.radians(44.5)))
+    boresight = viewer.angles_at(math.cos(math.radians(45.0)), -math.sin(math.radians(45.0)))
     assert boresight["side"] == 1 and abs(boresight["counts"]) < 1e-6
     shallow = viewer.angles_at(-10.0, -1.0)  # port, near horizontal: above the boresight
     assert shallow["side"] == 0 and shallow["off_boresight_deg"] > 0 and shallow["counts"] > 0
@@ -80,7 +80,7 @@ def test_viewer_bearing_panel_reads_counts_on_the_right():
     assert right.get_ylabel() == "raw phase counts"
     # Zero counts sit at the boresight; the right axis inverts the phase model
     to_counts = right._functions[0]
-    assert to_counts(math.radians(44.5)) == pytest.approx(0.0, abs=1e-6)
+    assert to_counts(math.radians(45.0)) == pytest.approx(0.0, abs=1e-6)
     assert to_counts(math.radians(30.0)) > 0  # above the boresight: positive counts
     viewer.flip(0)
     assert viewer.ax_phase.child_axes[0].get_ylabel() == "raw phase counts (port: ×−1)"

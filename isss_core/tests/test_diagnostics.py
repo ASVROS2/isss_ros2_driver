@@ -103,7 +103,7 @@ def test_phase_sign_undoes_an_upside_down_transducer():
     np.testing.assert_allclose(arrays.depression(fixed)[0, near, 0], beta_true, atol=1e-3)
     np.testing.assert_allclose(arrays.depression(default)[0, near, 1], beta_true, atol=1e-3)
     wrong = arrays.depression(default)[0, near, 0]
-    np.testing.assert_allclose(wrong, 2 * math.radians(44.5) - beta_true, atol=1e-3)
+    np.testing.assert_allclose(wrong, 2 * math.radians(45.0) - beta_true, atol=1e-3)
 
 
 def test_flat_bottom_is_flat_in_the_sensor_frame():

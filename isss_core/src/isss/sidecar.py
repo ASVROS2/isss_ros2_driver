@@ -10,7 +10,7 @@ recorded. The sidecar ``<log>.json`` records those. Example::
       "writer": {"package": "isss-core", "version": "0.2.0"},
       "sonar": {"ip": "192.168.2.62", "port": 57349},
       "calibration": {"sound_velocity": 1440.9, "counts_per_unit_sine": 15218.0,
-                      "boresight_depression_deg": 44.5,
+                      "boresight_depression_deg": 45.0,
                       "port_phase_sign": 1, "starboard_phase_sign": 1},
       "segments": [{"byte_offset": 0, "utc": "...", "range_m": 20.0, "num_samples": 1000,
                     "num_phases": 2, "decimation": 111}],

@@ -165,7 +165,7 @@ Defined in [`isss_ros2_driver/config/isss_driver.yaml`](isss_ros2_driver/config/
 | `frame_id` | string | `isss_link` | Frame for published messages |
 | `sound_velocity` | double | `1440.9` | Sound speed (m/s), reported in the message for slant range |
 | `counts_per_unit_sine` | double | `15218.0` | Interferometer scale K; see [phase model](docs/protocol.md#phase-and-depression) |
-| `boresight_depression_deg` | double | `44.5` | Depression of zero phase (includes the mount tilt) |
+| `boresight_depression_deg` | double | `45.0` | Depression of zero phase: the nominal mount angle, includes any mount tilt (the Beckholmen stick fit gave 44.5) |
 | `port_phase_sign` | int | `1` | `-1` if the port transducer is mounted upside down; see [phase model](docs/protocol.md#phase-and-depression) |
 | `starboard_phase_sign` | int | `1` | The same for starboard |
 | `use_device_time` | bool | `false` | `true`: stamp with the device ping counter (uptime since the sonar booted, not wall time). `false`: receive time on the host; the device counter stays in `ping_time`. Bag exports assume `false` |

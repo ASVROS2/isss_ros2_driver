@@ -130,11 +130,12 @@ receivers swap, negates the phase. Its returns then mirror about the boresight
 | Parameter | Default | Meaning |
 |---|---|---|
 | `counts_per_unit_sine` (K) | 15218 | Counts per unit sine of the off-boresight angle. With the 3.2 mm baseline this implies roughly 330–340 kHz acoustic frequency (inferred, not documented). |
-| `boresight_depression_deg` (β0) | 44.5 | Depression of zero phase; the arrays look about 45° down |
+| `boresight_depression_deg` (β0) | 45 | Depression of zero phase: the nominal mount angle (the arrays look 45° down). The Beckholmen fit gave 44.5° for the stick mount |
 | `port_phase_sign`, `starboard_phase_sign` | 1 | −1 for a transducer mounted upside down |
 
-The defaults come from fitting phase against a surveyed mesh of the Beckholmen
-dry dock (December 2025 stick recordings), validated on two held-out recordings:
+K comes from fitting phase against a surveyed mesh of the Beckholmen dry dock
+(December 2025 stick recordings); β0 defaults to the nominal 45° mount rather
+than that fit's 44.5°, so set it per mount. The fit was validated on two held-out recordings:
 starboard points land a median 0.1 m from the mesh, against about 4 m with the
 earlier driver formula. Method and code: `docs/usage/isss-ingestion.md` in
 [`julRusVal/sonar3d_reference`](https://github.com/julRusVal/sonar3d_reference);

@@ -35,7 +35,7 @@ PARAMETERS = {
     'frame_id': 'isss_link',
     'sound_velocity': 1440.9,
     'counts_per_unit_sine': 15218.0,
-    'boresight_depression_deg': 44.5,
+    'boresight_depression_deg': 45.0,
     'port_phase_sign': 1,
     'starboard_phase_sign': 1,
     'recv_timeout_sec': 2,

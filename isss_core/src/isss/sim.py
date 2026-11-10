@@ -65,7 +65,7 @@ def synthetic_packet(
     decimation: int = 111,
     bottom_sample: int | None = None,
     counts_per_unit_sine: float = 15218.0,
-    boresight_depression_deg: float = 44.5,
+    boresight_depression_deg: float = 45.0,
     phase_signs: tuple[int, int] = (1, 1),
 ) -> bytes:
     """Build one ping over a flat bottom: water column, then the seabed.

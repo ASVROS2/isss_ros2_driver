@@ -44,7 +44,7 @@ launch:
         - {name: frame_id, value: $(var frame_id)}
         - {name: sound_velocity, value: 1440.9}
         - {name: counts_per_unit_sine, value: 15218.0}
-        - {name: boresight_depression_deg, value: 44.5}
+        - {name: boresight_depression_deg, value: 45.0}
         - {name: port_phase_sign, value: 1}          # -1: transducer mounted upside down
         - {name: starboard_phase_sign, value: 1}
         # Time: false stamps header with the host receive time; ping_time keeps the device counter
