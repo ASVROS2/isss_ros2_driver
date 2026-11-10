@@ -60,7 +60,7 @@ port's nadir line, so leave it off (see `CrossTalk` below).
 ```python
 from isss import SonarConfig
 from isss.sources import load_pings
-from isss_proc import Pipeline, Swath, MostProbableAngle, default_stages
+from isss_proc import Pipeline, Swath, MostProbableAngle, default_stages, make_pipeline
 
 config = SonarConfig()                                   # the calibration
 arrays = load_pings("rosbag2_2025_12_14-12_18_12.nc")    # .bin, .nc or a bag of either driver

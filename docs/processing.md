@@ -44,7 +44,7 @@ the protocol and phase model are in [protocol.md](protocol.md).
 |---|---|---|
 | `isss_core` (`isss`) | Protocol, driver, logs, readers and converters of every format, diagnostics, the viewer | stdlib; numpy/matplotlib/h5netcdf optional |
 | `isss_proc` | Stages, pipeline, streaming, processing CLIs; later georeferencing and gridding | `isss_core`, numpy, scipy |
-| `isss_ros2_driver` | ROS wrappers: the driver node and the processing node (`isss_cloud_node`) | `isss_core`, `isss_proc`, rclpy |
+| `isss_ros2_driver` | ROS wrappers: the driver node, the processing node (`isss_cloud_node`) and the live topic viewer (`isss_ros_view`) | `isss_core`, `isss_proc`, rclpy |
 | `isss_msgs` | Messages | |
 
 The viewer stays in `isss_core` and takes a `keep` callable, so it has no

@@ -1,6 +1,7 @@
-float64 range
-int32 num_samples
-int32 num_phases
+# Reconfigure the sonar at runtime; the driver rewrites its registers.
+float64 range      # [m]; sets the decimation register
+int32 num_samples  # range bins per channel
+int32 num_phases   # phase register, normally 2; 0 = phase off
 ---
 bool success
 string message

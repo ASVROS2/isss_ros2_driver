@@ -11,6 +11,8 @@ sensor can be developed and bench-tested without ROS:
 | [`isss_msgs/`](isss_msgs) | `ISSS.msg` (one ping), `ISSSStatus.msg`, `ConfigureSonar.srv` | colcon |
 | [`docs/protocol.md`](docs/protocol.md) | The protocol, log files, the phase-to-depression model, what has been checked against data, and open questions | |
 | [`docs/bench-testing.md`](docs/bench-testing.md) | How to bench-test a sonar with `isss-bench`, and what to check by hand | |
+| [`docs/netcdf-format.md`](docs/netcdf-format.md) | The NetCDF4 export: layout, where files come from, how time is set | |
+| [`docs/processing.md`](docs/processing.md) | How processing is structured, which recordings are read, the plan | |
 | `isss_data/` | Three raw logs from the stick (Aug 2025) | |
 | [`legacy/`](legacy) | The previous C++ driver, kept for reference; not built | |
 
@@ -39,9 +41,9 @@ ping 192.168.2.62
 ```
 
 Wait about a minute after power-on: ping can answer before TCP connections do.
-Every tool defaults to this address (`isss-stream --ip`, `isss-view --ip`,
-`isss-bench --ip`, and the node's `ip` parameter); pass another one only if your
-unit has been reconfigured. More in [`docs/bench-testing.md`](docs/bench-testing.md)
+`isss-stream`, `isss-bench` and the node's `ip` parameter default to this
+address; pass another one only if your unit has been reconfigured. The viewers
+go live only when given an address, so type it there: `isss-view --ip 192.168.2.62`. More in [`docs/bench-testing.md`](docs/bench-testing.md)
 and [`docs/protocol.md`](docs/protocol.md).
 
 ## Bench work (no ROS)

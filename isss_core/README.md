@@ -12,7 +12,7 @@ Python package `isss` for the **DeepVision Interferometric Side Scan Sonar (ISSS
 - Binary log reading and writing, with a JSON sidecar per log (`isss/sidecar.py`)
 - NetCDF4 export for analysis (`isss-export`, and automatically by the driver when a log closes), also from rosbag2 bags of `isss/raw` (MCAP or sqlite3) and, with `isss-export-legacy`, of the old C++ driver; format in [../docs/netcdf-format.md](../docs/netcdf-format.md)
 - `isss-bench`: bench test of a connected sonar ([../docs/bench-testing.md](../docs/bench-testing.md))
-- Diagnostics: `isss-report` (figures and health checks for a log) and `isss-view` (interactive viewer for a log, a bag or a live sonar; `isss-view-legacy` for old-driver bags)
+- Diagnostics: `isss-report` (figures and health checks for any recording) and `isss-view` (interactive viewer for a log, a bag or a live sonar; `isss-view-legacy` for old-driver bags)
 
 ## Install
 
@@ -23,7 +23,7 @@ cd isss_core
 uv sync
 ```
 
-This creates a virtual environment, installs the package in editable mode, and pulls in dev dependencies (pytest, matplotlib, numpy).
+This creates a virtual environment, installs the package in editable mode, and pulls in dev dependencies (pytest, matplotlib, numpy, h5netcdf, h5py, xarray).
 
 To include only the diagnostics extra (numpy, matplotlib) without dev tools:
 

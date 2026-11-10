@@ -66,10 +66,11 @@ another calibration, recompute it from `phase_counts`, or re-export with
 [protocol.md](protocol.md#phase-and-depression).
 
 Global attributes: `Conventions` (CF-1.10), `isss_format`,
-`isss_format_version`, `software`, `phase_model`, `counts_per_unit_sine`,
+`isss_format_version`, `title`, `instrument`, `software`, `references`, `phase_model`, `counts_per_unit_sine`,
 `boresight_depression_deg`, `port_phase_sign`, `starboard_phase_sign`,
 `sound_velocity`, `source_file`, `history`, `time_source`, `part`, `pings`, and
-`sidecar` (the log's JSON sidecar, if it had one).
+`sidecar` (the log's JSON sidecar, if it had one). A bag given as a directory
+exports to `<dir>.nc`; a single `.mcap` or `.db3` file to `<file>.nc`.
 
 The sample arrays are gzip-compressed (level 4, shuffle) in chunks of 256
 pings. A 20 m, 1000-sample log takes about 11 KB per ping.

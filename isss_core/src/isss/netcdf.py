@@ -383,7 +383,7 @@ def _global_attrs(config: SonarConfig) -> dict[str, Any]:
         "isss_format_version": np.int32(VERSION),
         "instrument": "DeepVision interferometric sidescan sonar (ISSS)",
         "software": f"isss-core {__version__}",
-        "references": "https://github.com/julRusVal/isss_ros2_driver, docs/protocol.md",
+        "references": "https://github.com/ASVROS2/isss_ros2_driver, docs/protocol.md",
         "phase_model": "counts = sign * K * sin(beta0 - depression)",
         "counts_per_unit_sine": float(config.counts_per_unit_sine),
         "boresight_depression_deg": float(config.boresight_depression_deg),
