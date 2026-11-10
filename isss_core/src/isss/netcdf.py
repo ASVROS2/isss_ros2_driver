@@ -151,22 +151,28 @@ class NetcdfWriter:
 def write_runs(
     out: Path,
     config: SonarConfig,
-    blocks: Iterable[tuple[PingArrays, np.ndarray]],
+    blocks: Iterable[tuple],
     attrs: dict[str, Any],
 ) -> list[Path]:
-    """Write ``(arrays, time)`` blocks, starting a new file whenever sample count or decimation change."""
+    """Write ``(arrays, time)`` blocks, starting a new file whenever sample count or decimation change.
+
+    A block may be ``(arrays, time, config)`` to give its own calibration (a
+    bag of this driver records it per ping); a change of it starts a new file too.
+    """
     paths: list[Path] = []
     writer: Optional[NetcdfWriter] = None
     try:
-        for arrays, time in blocks:
+        for arrays, time, *own in blocks:
+            block_config = own[0] if own else config
             for start, end in _runs(arrays.decimation):
                 part = arrays.select(slice(start, end))
                 key = (part.num_samples, int(part.decimation[0]))
-                if writer is None or key != (writer.num_samples, writer.decimation):
+                if writer is None or key != (writer.num_samples, writer.decimation) or block_config != writer.config:
                     if writer is not None:
                         paths.append(writer.close())
                     path = out if not paths else out.with_name(f"{out.stem}_{len(paths) + 1}.nc")
-                    writer = NetcdfWriter(path, config, *key, attrs={**attrs, "part": np.int32(len(paths) + 1)})
+                    writer = NetcdfWriter(path, block_config, *key,
+                                          attrs={**attrs, "part": np.int32(len(paths) + 1)})
                 writer.append(part, time[start:end])
         if writer is not None:
             paths.append(writer.close())
@@ -175,6 +181,24 @@ def write_runs(
             writer.abort()
         raise
     return paths
+
+
+def read_netcdf_config(path: str | Path) -> SonarConfig:
+    """The calibration an exported file was written with (its global attributes)."""
+    import h5netcdf
+
+    with h5netcdf.File(path, "r") as f:
+        a = f.attrs
+        if a.get("isss_format") != FORMAT:
+            raise ValueError(f"{path} is not an {FORMAT} file")
+        return SonarConfig(
+            num_samples=int(f.dimensions["sample"].size),
+            sound_velocity=float(a["sound_velocity"]),
+            counts_per_unit_sine=float(a["counts_per_unit_sine"]),
+            boresight_depression_deg=float(a["boresight_depression_deg"]),
+            port_phase_sign=int(a["port_phase_sign"]),
+            starboard_phase_sign=int(a["starboard_phase_sign"]),
+        )
 
 
 def read_netcdf(path: str | Path) -> PingArrays:
@@ -197,11 +221,20 @@ def read_netcdf(path: str | Path) -> PingArrays:
 # .bin logs
 
 
-def export_bin(bin_path: str | Path, out: str | Path | None = None, config: SonarConfig | None = None) -> list[Path]:
-    """Export a ``.bin`` log (and its sidecar) to ``<log>.nc``; returns the files written."""
+def export_bin(bin_path: str | Path, out: str | Path | None = None, config: SonarConfig | None = None,
+               adjust: Callable[[SonarConfig], SonarConfig] | None = None) -> list[Path]:
+    """Export a ``.bin`` log (and its sidecar) to ``<log>.nc``; returns the files written.
+
+    The calibration is ``config`` if given, else the sidecar's (else the
+    defaults), passed through ``adjust`` (the command-line options) if given.
+    """
+    from isss.sidecar import recorded_config
+
     bin_path = Path(bin_path)
-    config = config or SonarConfig()
     meta = read_sidecar(bin_path)
+    config = config or recorded_config(meta) or SonarConfig()
+    if adjust is not None:
+        config = adjust(config)
     to_utc, time_source = _bin_clock(bin_path, meta)
     attrs = _source_attrs(bin_path, f"isss-export of {bin_path.name}", time_source, meta)
     out = Path(out) if out else bin_path.with_suffix(".nc")
@@ -209,8 +242,10 @@ def export_bin(bin_path: str | Path, out: str | Path | None = None, config: Sona
 
 
 def is_bag(path: str | Path) -> bool:
-    path = Path(path)
-    return path.suffix == ".db3" or (path.is_dir() and any(path.glob("*.db3")))
+    """A rosbag2 bag (directory, ``.mcap`` or ``.db3``) of either driver; ``isss.ros2bag.bag_kind`` says which."""
+    from isss.ros2bag import is_bag as _is_bag
+
+    return _is_bag(path)
 
 
 def _bin_blocks(bin_path: Path, meta: Optional[dict], to_utc: Callable) -> Iterator[tuple[PingArrays, np.ndarray]]:
@@ -267,7 +302,41 @@ def _bin_clock(bin_path: Path, meta: Optional[dict]) -> tuple[Callable[[np.ndarr
     return from_name, "log file name (host time when the log was opened) and the device ping counter; approximate"
 
 
-# rosbag2
+# rosbag2 of this driver (isss_msgs/ISSS)
+
+
+def export_isss_bag(bag: str | Path, out: str | Path | None = None, topic: str | None = None,
+                    adjust: Callable[[SonarConfig], SonarConfig] | None = None) -> list[Path]:
+    """Export the ``isss_msgs/ISSS`` pings of a bag (MCAP or sqlite3) to ``<bag>.nc``.
+
+    The calibration comes from the messages (``adjust`` may change it, as the
+    command-line options do); a change of it mid-bag starts a new file. Time is
+    ``isss.ros2bag.fit_clock`` of the header stamps and the device counter.
+    """
+    from isss import ros2bag
+
+    bag = Path(bag)
+    pings = ros2bag.read_pings(bag, topic)
+    times = ros2bag.fit_clock(np.array([p.stamp_ns for p in pings], dtype=np.float64) * 1e-9,
+                              np.array([p.ping_time for p in pings], dtype=np.int64))
+    attrs = _source_attrs(bag, f"isss-export of rosbag2 {bag.name} (topic {topic or 'auto'})",
+                          ros2bag.CLOCK_SOURCE, None)
+    out = Path(out) if out else bag.with_name(bag.name + ".nc")
+    adjust = adjust or (lambda c: c)
+
+    def blocks() -> Iterator[tuple[PingArrays, np.ndarray, SonarConfig]]:
+        i = 0
+        while i < len(pings):
+            j = i
+            while j < len(pings) and j - i < BLOCK and pings[j].config_key == pings[i].config_key:
+                j += 1
+            yield ros2bag.to_arrays(pings[i:j]), times[i:j], adjust(pings[i].config())
+            i = j
+
+    return write_runs(out, SonarConfig(), blocks(), attrs)
+
+
+# rosbag2 of the old C++ driver (smarc_msgs/ISSS)
 
 
 def bag_packets(bag: str | Path, topic: str | None = None) -> list[tuple[int, bytes]]:

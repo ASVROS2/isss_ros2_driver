@@ -42,10 +42,12 @@ setup(
         "console_scripts": [
             "isss-bench = isss.bench:main",
             "isss-export = isss.cli:main_export",
+            "isss-export-legacy = isss.cli:main_export_legacy",
             "isss-report = isss.cli:main_report",
             "isss-stream = isss.cli:main_stream",
             "isss-sim = isss.sim:main",
             "isss-view = isss.cli:main_view",
+            "isss-view-legacy = isss.cli:main_view_legacy",
         ],
     },
 )

@@ -22,10 +22,11 @@ the protocol and phase model are in [protocol.md](protocol.md).
   `isss_core` (`isss.sources`), so processing never sees a file format. Supporting an
   old recording means writing a reader into `PingArrays`, or a converter to
   the NetCDF format ([netcdf-format.md](netcdf-format.md)), not changing a filter.
-- **Calibration travels with the data, not in it.** Depression is derived from
-  the counts through `SonarConfig` (K, β0, phase signs, sound speed) every time.
-  Old recordings are reprocessed with today's calibration, and recalibrating
-  never needs a re-export. This is why stages work on counts and depressions,
+- **Depression is always recomputed from the counts.** It is derived through
+  `SonarConfig` (K, β0, phase signs, sound speed) every time. Recordings of this
+  driver carry the calibration they were taken with (bag messages, sidecar,
+  `.nc` attributes) and the tools use it unless options override it; old
+  recordings get today's defaults. Recalibrating never needs a re-export. This is why stages work on counts and depressions,
   never on the angles old drivers stored, which were wrong (protocol.md).
 - **A stage is a pure function of a swath.** `stage(swath, keep, info) -> mask`.
   It holds no state between calls. "Online" is the same call on a rolling
@@ -56,13 +57,14 @@ dependency on `isss_proc`; `isss-proc-view` plugs the pipeline in.
 | `.bin` logs with sidecar (2026 onwards) | this driver | read |
 | Aug 2025 stick `.bin` logs, no sidecar | earlier logger | read |
 | Dec 2025 Beckholmen bags, `smarc_msgs/ISSS` | old C++ driver, ROS 2 | read (`isss.bag`): the packet header and exact phase word survive in the message |
-| Bags of this driver, `isss_msgs/ISSS` | ROS 2 node | **to do**: the conversion from message fields exists (`isss.sources.pings_from_message_fields`, `config_from_message_fields`; `size_field` is not in the message and reads 0); `load_pings` still needs to read the bags |
+| Bags of this driver, `isss_msgs/ISSS` | ROS 2 node | read (`isss.ros2bag`, MCAP or sqlite3), calibration from the messages (`isss.sources.load_recording`); `size_field` is not in the message and reads 0 |
 | Askö Oct 2024 ROS 1 bags (`port_channel_phase_15_8` / `_7_0` byte fields) | older driver | **to do**: needs a ROS 1 reader (`rosbags`). The messages carry no decimation, so the range must be given. The MPAA scripts were tuned on these, with DVL altitude |
 | July 2024 logs, phase outside ±10240 | older driver | **to do**: the encoding differs; understand it before converting (`isss-report` flags it) |
 | `.npy` dumps of the 2024 scripts (`*_raw_isss.npy`) | `py_files/parse_ros_bag.py` | Prefer the bags. The dumps can be read if needed: their signed conversion subtracted 65535, not 65536, which is recoverable |
 
 Each reader produces `PingArrays` (and per-ping UTC time, see below) and is
-tested against a few pings decoded by hand, as `test_netcdf.py` does for bags.
+tested against a few pings decoded by hand, as `test_netcdf.py` (old-driver bags)
+and `test_ros2bag.py` (bags of this driver) do.
 
 ## Next steps
 

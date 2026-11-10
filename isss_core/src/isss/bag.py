@@ -72,7 +72,7 @@ def iter_bag_packets(bag: str | Path, topic: str | None = None) -> Iterator[tupl
 
 def legacy_message_to_packet(cdr: bytes) -> tuple[int, bytes]:
     """Rebuild ``(header stamp [ns], raw packet)`` from one serialized ``smarc_msgs/ISSS``."""
-    r = _CdrReader(cdr)
+    r = CdrReader(cdr)
     sec, nanosec = r.scalar("i"), r.scalar("I")
     r.string()  # frame_id
     for fmt in ("B", "I", "B", "f", "h", "H", "f", "f", "f"):
@@ -102,7 +102,7 @@ def _connect(path: Path) -> sqlite3.Connection:
     return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
 
 
-class _CdrReader:
+class CdrReader:
     """Little-endian CDR; alignment is relative to the end of the 4-byte encapsulation header."""
 
     def __init__(self, data: bytes) -> None:

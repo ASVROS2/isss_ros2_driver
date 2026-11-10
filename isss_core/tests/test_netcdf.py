@@ -14,7 +14,7 @@ xr = pytest.importorskip("xarray")
 
 from isss import SonarConfig, SonarDriver  # noqa: E402
 from isss.bag import LEGACY_TYPE, legacy_message_to_packet  # noqa: E402
-from isss.cli import main_export  # noqa: E402
+from isss.cli import main_export, main_export_legacy  # noqa: E402
 from isss.diagnostics import decode_packets, load_log  # noqa: E402
 from isss.netcdf import export_bag, export_bin, read_netcdf  # noqa: E402
 from isss.sidecar import read_sidecar  # noqa: E402
@@ -147,15 +147,29 @@ def test_bag_export_sorts_by_header_stamp(tmp_path):
     np.testing.assert_allclose(ds.time.values.astype("datetime64[ns]").astype(np.int64), stamps)
 
 
-def test_export_command(tmp_path, capsys):
+def test_export_commands(tmp_path, capsys):
     bag = _make_bag(tmp_path / "rosbag2_cli", [(10**18 + i, p) for i, p in enumerate(_packets(3))])
     out = tmp_path / "out"
     out.mkdir()
     with pytest.raises(SystemExit) as exit_:
-        main_export([str(bag), str(LOG), "-o", str(out), "--flip-port"])
+        main_export_legacy([str(bag), "-o", str(out), "--flip-port"])
+    assert exit_.value.code == 0
+    with pytest.raises(SystemExit) as exit_:
+        main_export([str(LOG), "-o", str(out), "--flip-port"])
     assert exit_.value.code == 0
     assert sorted(p.name for p in out.iterdir()) == ["rosbag2_cli.nc", "stick_2025-08-19_5pings.nc"]
     assert xr.open_dataset(out / "rosbag2_cli.nc").attrs["port_phase_sign"] == -1
+    assert xr.open_dataset(out / "stick_2025-08-19_5pings.nc").attrs["port_phase_sign"] == -1
+    capsys.readouterr()
+
+
+def test_export_commands_send_each_driver_to_its_own(tmp_path, capsys):
+    bag = _make_bag(tmp_path / "rosbag2_cli", [(10**18 + i, p) for i, p in enumerate(_packets(3))])
+    for command, path, hint in ((main_export, bag, "-legacy"), (main_export_legacy, LOG, "not a bag of the old")):
+        with pytest.raises(SystemExit) as exit_:
+            command([str(path), "-o", str(tmp_path / "x.nc")])
+        assert exit_.value.code == 1 and hint in capsys.readouterr().err
+    assert not (tmp_path / "x.nc").exists()
 
 
 # Driver
@@ -196,3 +210,25 @@ def test_driver_export_can_be_disabled(tmp_path):
             log = Path(driver.status().log_path)
             assert _wait_for(lambda: log.stat().st_size >= 2 * 6012)
     assert not list(tmp_path.glob("*.nc"))
+
+
+def test_bin_and_nc_bring_their_calibration(tmp_path, capsys):
+    from isss.sidecar import new_sidecar, write_sidecar
+    from isss.sources import load_recording
+
+    log = tmp_path / "log.bin"
+    log.write_bytes(LOG.read_bytes())
+    recorded = SonarConfig(counts_per_unit_sine=14000.0, boresight_depression_deg=40.0, port_phase_sign=-1)
+    write_sidecar(log, new_sidecar(log, recorded, []))
+    _, config = load_recording(log)
+    assert (config.counts_per_unit_sine, config.boresight_depression_deg, config.port_phase_sign) == (14000.0, 40.0, -1)
+    [nc] = export_bin(log)  # no config given: the sidecar's
+    assert xr.open_dataset(nc).attrs["counts_per_unit_sine"] == 14000.0
+    _, from_nc = load_recording(nc)
+    assert (from_nc.boresight_depression_deg, from_nc.port_phase_sign) == (40.0, -1)
+    with pytest.raises(SystemExit):  # options override; flips are relative to the recorded sign
+        main_export([str(log), "-o", str(tmp_path / "o.nc"), "--k", "13000", "--flip-port"])
+    ds = xr.open_dataset(tmp_path / "o.nc")
+    assert ds.attrs["counts_per_unit_sine"] == 13000.0 and ds.attrs["port_phase_sign"] == 1
+    assert ds.attrs["boresight_depression_deg"] == 40.0
+    capsys.readouterr()

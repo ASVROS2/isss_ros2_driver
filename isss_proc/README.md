@@ -4,7 +4,7 @@ Processing of **DeepVision ISSS** pings, with no ROS dependency: filter
 stages that decide which returns to trust, run over a whole recording or over
 live pings as they arrive. It reads its data through
 [`isss_core`](../isss_core), so the same code takes the live driver, `.bin`
-logs, exported `.nc` files and bags of the old C++ driver. Where this is
+logs, exported `.nc` files and rosbag2 bags of this driver and of the old C++ driver. Where this is
 going, and how a ROS node and older data fit in: [../docs/processing.md](../docs/processing.md).
 
 ## Install
@@ -63,7 +63,7 @@ from isss.sources import load_pings
 from isss_proc import Pipeline, Swath, MostProbableAngle, default_stages
 
 config = SonarConfig()                                   # the calibration
-arrays = load_pings("rosbag2_2025_12_14-12_18_12.nc")    # .bin, .nc or old-driver bag
+arrays = load_pings("rosbag2_2025_12_14-12_18_12.nc")    # .bin, .nc or a bag of either driver
 result = Pipeline().run(Swath(arrays.select(slice(0, 500)), config))
 result.summary()          # per side: samples dropped by each stage, kept
 result.points()           # kept returns in the sensor frame

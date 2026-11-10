@@ -10,9 +10,9 @@ Python package `isss` for the **DeepVision Interferometric Side Scan Sonar (ISSS
 - `SonarDriver`: read thread with reconnect, raw `.bin` logging and ping-rate statistics
 - `SimulatedSonar` / `isss-sim`: a fake sonar on TCP that replays logs or makes synthetic pings
 - Binary log reading and writing, with a JSON sidecar per log (`isss/sidecar.py`)
-- NetCDF4 export for analysis (`isss-export`, and automatically by the driver when a log closes), also from rosbag2 bags of the old C++ driver; format in [../docs/netcdf-format.md](../docs/netcdf-format.md)
+- NetCDF4 export for analysis (`isss-export`, and automatically by the driver when a log closes), also from rosbag2 bags of `isss/raw` (MCAP or sqlite3) and, with `isss-export-legacy`, of the old C++ driver; format in [../docs/netcdf-format.md](../docs/netcdf-format.md)
 - `isss-bench`: bench test of a connected sonar ([../docs/bench-testing.md](../docs/bench-testing.md))
-- Diagnostics: `isss-report` (figures and health checks for a log) and `isss-view` (interactive viewer for a log or a live sonar)
+- Diagnostics: `isss-report` (figures and health checks for a log) and `isss-view` (interactive viewer for a log, a bag or a live sonar; `isss-view-legacy` for old-driver bags)
 
 ## Install
 
@@ -76,7 +76,8 @@ for samples, packet in iter_packets_from_log("log.bin"):
 
 ```bash
 isss-export log.bin                   # -> log.nc (uses log.json for timing and segments)
-isss-export rosbag2_2025_12_14-*/     # old-driver bags (smarc_msgs/ISSS) -> rosbag2_....nc
+isss-export rosbag2_2026_11_09-*/     # bags of isss/raw (isss_msgs/ISSS, MCAP or sqlite3) -> rosbag2_....nc
+isss-export-legacy rosbag2_2025_12_14-*/   # old-driver bags (smarc_msgs/ISSS)
 ```
 
 ```python
@@ -91,8 +92,9 @@ The driver writes `<log>.nc` itself when each log closes. Layout and timing:
 
 ```bash
 isss-report log.bin            # figures + health checks in log_report/ (README.md, summary.json, PNGs)
-isss-view log.bin              # interactive: waterfall + selected ping (also .nc files and old-driver bags)
+isss-view log.bin              # interactive: waterfall + selected ping (also .nc files and isss/raw bags)
 isss-view --ip 192.168.2.62    # the same, live (or --ip 127.0.0.1 with isss-sim running)
+isss-view-legacy rosbag2_2025_12_14-12_18_12/   # a bag of the old C++ driver
 ```
 
 The health checks warn about what we have seen go wrong: ping interval not
@@ -120,8 +122,14 @@ wall on that side. The bearing panel plots each sample's depression [rad]
 against range, with the raw phase counts of the same points on its right axis.
 The profile marks which edge of each sector positive and negative counts map to.
 Hovering it reads out the depression, the off-boresight angle and the counts
-expected there. All tools take `--k`, `--boresight`, `--flip-port`,
-`--flip-starboard` and `--sound-velocity` to try another calibration.
+expected there. The viewer, report, export and `isss-proc*` commands take `--k`,
+`--boresight`, `--flip-port`, `--flip-starboard` and `--sound-velocity` to try
+another calibration. By default they use the recording's own: a bag of this
+driver has it in every message, a `.bin` in its sidecar, an `.nc` in its
+attributes. Old-driver bags and `.bin` logs without a sidecar get the defaults.
+The options override it, and `--flip-*` flips the recorded sign. A bag whose
+configuration changes is shown (and reported) with the pings of its most common
+configuration only; `isss-export` splits it into one file per configuration.
 `PingViewer` takes a `keep` mask function and a `trail`; `isss-proc-view` in
 [`../isss_proc`](../isss_proc) uses them to show what its filters keep.
 Live viewing goes through `isss.viz.run_live(source, title=...)`, where a source
@@ -165,7 +173,9 @@ is unknown; see the open questions in the protocol doc.
 - `test_driver.py`: connect, register writes, reconfigure, reconnect, logging, pacing against the simulator
 - `test_diagnostics.py`, `test_viz.py`: the vectorised decoder matches the reference one; the checks flag shifted phase, gaps, out-of-water logs; a flat bottom comes out flat; figures, viewer and live buffer work headless
 - `test_sidecar.py`: sidecars describe their logs, segments on reconfiguration, older logs still load
-- `test_netcdf.py`: `.bin` and old-driver bag exports match the decoded pings, files split on reconfiguration, time from sidecar or stamps, the driver exports each log on close
+- `test_netcdf.py`: `.bin` and old-driver bag exports match the decoded pings, files split on reconfiguration, time from sidecar or stamps, calibration from sidecar and `.nc`, the driver exports each log on close
+- `test_sources.py`: pings and configuration from `isss_msgs/ISSS` message fields agree with the decoded packets
+- `test_ros2bag.py`: bags of this driver in MCAP (with and without summary, lz4) and sqlite3 read back in stamp order with their calibration; the clock fit removes jitter and survives a counter wrap and a reboot; export and the commands
 - `test_bench.py`: the bench passes on the simulator and catches a device that ignores a register
 - `test_packaging.py`: `pyproject.toml` (uv) and `setup.py`/`package.xml` (colcon) stay in step
 
@@ -180,13 +190,14 @@ src/isss/
   log.py        Binary log reading and writing
   sidecar.py    The JSON sidecar next to each log
   netcdf.py     NetCDF4 export (isss-export) and reading it back
-  sources.py    load_pings: PingArrays from a .bin, .nc or old-driver bag (the one entry for readers)
+  sources.py    load_pings / load_recording: PingArrays (and calibration) from any recording (the one entry for readers)
+  ros2bag.py    isss_msgs/ISSS from rosbag2 bags of this driver (MCAP, sqlite3), and the clock fit
   bag.py        Raw packets from rosbag2 bags of the old C++ driver
   bench.py      isss-bench
   sim.py        SimulatedSonar and the isss-sim command
-  diagnostics.py  numpy arrays of pings, health checks, sensor-frame points
-  viz.py        report figures and the interactive viewer (matplotlib)
-  cli.py        isss-stream / isss-report / isss-view / isss-export commands
+  diagnostics.py  numpy arrays of pings, health checks, sensor-frame points; SonarSource / PacketBuffer (live TCP source)
+  viz.py        report figures, the interactive viewer, run_live (matplotlib)
+  cli.py        isss-stream / isss-report / isss-view(-legacy) / isss-export(-legacy) commands
 tests/data/     5 real pings and their decoded snapshot
 setup.py, package.xml, resource/   colcon (ament_python) packaging
 ```

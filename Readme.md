@@ -55,6 +55,7 @@ uv run isss-stream --ip 127.0.0.1 --count 5     # in another shell; or --ip 192.
 uv run isss-report ../isss_data/1755610748.553636.bin   # figures + health checks
 uv run isss-view ../isss_data/1755610748.553636.bin     # interactive; or --ip for a live sonar
 uv run isss-export ../isss_data/1755610748.553636.bin   # NetCDF4 for analysis, see docs/netcdf-format.md
+uv run isss-export rosbag2_2026_11_09-*/                # a bag of isss/raw (MCAP or sqlite3) -> .nc
 uv run isss-bench --ip 192.168.2.62                     # bench test of a connected sonar, see docs/bench-testing.md
 
 cd ../isss_proc && uv sync
@@ -112,6 +113,26 @@ ros2 launch isss_ros2_driver isss.launch.yaml parent_frame:=base_link x:=0.5 z:=
 | `/diagnostics` | `/diagnostics` | `diagnostic_msgs/DiagnosticArray` | Driver health |
 | `isss/cloud` | `/isss/cloud` | `sensor_msgs/PointCloud2` | From `isss_cloud_node`: the returns of one ping the filters keep, in the ping's `frame_id` and stamp |
 
+### Recording for offline work
+
+`isss/raw` is unfiltered and carries everything needed to rebuild the data:
+each message turns back into the sonar's packet byte for byte, except header
+bytes 2–3, which are constant (6007) and of unknown meaning
+([protocol.md](docs/protocol.md#open-questions)). Phase is the signed hardware
+counts, with nothing lost. Every message also holds the configuration it was
+taken with (range, sample interval, sound speed, K, boresight, phase signs).
+`num_phases` is only in `isss/status`, and the mount only in `/tf_static`, so
+record those too:
+
+```bash
+ros2 bag record /isss/raw /isss/status /tf_static
+isss-export rosbag2_*/          # -> .nc, calibration from the messages
+```
+
+`header.stamp` is the host's receive time and `ping_time` the sonar's counter;
+`isss-export` fits one to the other. With `save_path` set, the driver also
+writes the `.bin` logs, the lossless record of the packets themselves.
+
 ### Services
 
 Names are relative, so they sit under the launch `namespace` next to the topics (`/<namespace>/isss/configure_sonar`).
@@ -145,7 +166,7 @@ Defined in [`isss_ros2_driver/config/isss_driver.yaml`](isss_ros2_driver/config/
 | `boresight_depression_deg` | double | `44.5` | Depression of zero phase (includes the mount tilt) |
 | `port_phase_sign` | int | `1` | `-1` if the port transducer is mounted upside down; see [phase model](docs/protocol.md#phase-and-depression) |
 | `starboard_phase_sign` | int | `1` | The same for starboard |
-| `use_device_time` | bool | `false` | `true`: stamp with the device ping counter (uptime since the sonar booted, not wall time). `false`: receive time on the host; the device counter stays in `ping_time` |
+| `use_device_time` | bool | `false` | `true`: stamp with the device ping counter (uptime since the sonar booted, not wall time). `false`: receive time on the host; the device counter stays in `ping_time`. Bag exports assume `false` |
 | `device_time_offset_sec` | double | `0.0` | Added to device time when stamping |
 | `reconnect_interval_sec` | double | `5.0` | Delay between reconnect attempts |
 | `recv_timeout_sec` | int | `2` | Socket receive timeout |
@@ -208,7 +229,7 @@ differ only in where pings come from:
 
 | Command | Source | Use |
 |---|---|---|
-| `isss-view <log>` / `isss-proc-view <log>` | `.bin`, `.nc` or bag | Offline |
+| `isss-view <log>` / `isss-proc-view <log>` | `.bin`, `.nc` or a bag of `isss/raw`; old-driver bags: `isss-view-legacy` (`isss-proc-view` takes both) | Offline |
 | `isss-view --ip` / `isss-proc-view --ip` | TCP to the sonar (`isss.diagnostics.SonarSource`) | Bench, **without** the ROS driver |
 | `isss_ros_view` | `isss/raw` topic (`isss_ros2_driver.view_node.TopicSource`) | With the ROS driver running |
 
@@ -244,6 +265,8 @@ The C++ source is kept in [`legacy/cpp_driver/`](legacy/cpp_driver) and under th
 - Services moved from `<namespace>/isss_ros2_driver_node/<name>` to `<namespace>/isss/<name>`,
   beside the topics.
 - `ros2 run isss_ros2_driver plot_isss.py` is replaced by `isss-report` and `isss-view` from `isss_core`.
+- Bags of the old driver open with `isss-view-legacy` and `isss-export-legacy`;
+  `isss-view` and `isss-export` read this driver's `.bin` logs and `isss/raw` bags.
 
 With `save_path` set, logging now starts at launch even if the first connection
 attempt fails (the C++ node only started it after a successful first connect).

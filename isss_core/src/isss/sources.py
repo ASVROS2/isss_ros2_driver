@@ -1,7 +1,8 @@
 """Pings from any recorded source, as ``PingArrays``.
 
 Every format the tools read lands here: ``.bin`` logs of this driver, exported
-``.nc`` files, and rosbag2 bags of the old C++ driver (``smarc_msgs/ISSS``).
+``.nc`` files, rosbag2 bags of this driver (``isss_msgs/ISSS``, MCAP or
+sqlite3) and of the old C++ driver (``smarc_msgs/ISSS``).
 Readers of other old formats belong here too, so that everything downstream
 (the viewer, the report, ``isss_proc``) sees one kind of data.
 ``pings_from_message_fields`` converts the ``isss_msgs/ISSS`` messages of the
@@ -28,21 +29,53 @@ def load_pings(
     segment: int | None = None,
     topic: str | None = None,
 ) -> PingArrays:
-    """Pings of a ``.bin`` log, an exported ``.nc``, or a rosbag2 bag of the old driver.
+    """Pings of a ``.bin`` log, an exported ``.nc``, or a rosbag2 bag of either driver.
 
     ``num_samples`` and ``segment`` apply to ``.bin`` logs (see ``load_log``),
     ``topic`` to bags with more than one ISSS topic. A bag whose sample count
     changes keeps the pings of its most common one. Raises ``ValueError`` for
     a file it cannot read.
     """
-    from isss import netcdf
+    return load_recording(path, num_samples=num_samples, segment=segment, topic=topic)[0]
+
+
+def load_recording(
+    path: str | Path,
+    *,
+    num_samples: int | None = None,
+    segment: int | None = None,
+    topic: str | None = None,
+) -> tuple[PingArrays, SonarConfig | None]:
+    """``load_pings``, plus the calibration the recording carries, or None.
+
+    A bag of this driver has it in every message (the pings of its most common
+    configuration are kept), an exported ``.nc`` in its attributes, a ``.bin``
+    in its sidecar. Old-driver bags and ``.bin`` logs without a sidecar have none.
+    """
+    from isss import netcdf, ros2bag
+    from isss.sidecar import read_sidecar, recorded_config
 
     path = Path(path)
     if path.suffix == ".nc":
         try:
-            return netcdf.read_netcdf(path)
+            return netcdf.read_netcdf(path), netcdf.read_netcdf_config(path)
         except ImportError:
             raise ValueError("reading .nc files needs the export extra: uv sync --extra export") from None
+    if ros2bag.is_bag(path) and ros2bag.bag_kind(path) == "isss":
+        pings = ros2bag.read_pings(path, topic)
+        if not pings:
+            raise ValueError(f"{path} has no ISSS pings")
+        key = Counter(p.config_key for p in pings).most_common(1)[0][0]
+        pings = [p for p in pings if p.config_key == key]
+        return ros2bag.to_arrays(pings), pings[0].config()
+    if ros2bag.is_bag(path):
+        return _load_other(path, num_samples, segment, topic), None
+    return _load_other(path, num_samples, segment, topic), recorded_config(read_sidecar(path))
+
+
+def _load_other(path: Path, num_samples, segment, topic) -> PingArrays:
+    from isss import netcdf
+
     if netcdf.is_bag(path):
         packets = [p for _, p in netcdf.bag_packets(path, topic)]
         if not packets:

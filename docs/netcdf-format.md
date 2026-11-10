@@ -19,14 +19,22 @@ ds.time                                       # UTC per ping, decoded to datetim
 | Source | How | `time` |
 |---|---|---|
 | The driver (`SonarDriver`, ROS node) | Automatically, `<log>.nc` next to each `<log>.bin` when the log closes (`export_netcdf`, on by default) | Host time of the first and last packets from the sidecar, paired with the device ping counter, linear in between, so device clock drift is absorbed |
-| An old `.bin` log | `isss-export log.bin` | As above with a sidecar. Without one, the time in the file name (when the log was opened), approximate. Otherwise NaT |
-| A rosbag2 bag of the old C++ driver (`smarc_msgs/ISSS`) | `isss-export rosbag2_dir/` → `rosbag2_dir.nc` | ROS header stamps, sorted |
+| An old `.bin` log | `isss-export log.bin` (calibration from the sidecar unless options are given) | As above with a sidecar. Without one, the time in the file name (when the log was opened), approximate. Otherwise NaT |
+| A rosbag2 bag of this driver (`isss_msgs/ISSS` on `isss/raw`, MCAP or sqlite3) | `isss-export rosbag2_dir/` → `rosbag2_dir.nc` | `header.stamp` (receive time) fitted with a line in the device ping counter, per power cycle of the sonar: the recording computer's clock without the network jitter. Assumes the driver's default `use_device_time: false` |
+| A rosbag2 bag of the old C++ driver (`smarc_msgs/ISSS`) | `isss-export-legacy rosbag2_dir/` → `rosbag2_dir.nc` | ROS header stamps, sorted |
 
-The `time_source` attribute says which. Old-driver bags still hold the
-original packet: `extra_channel` is the 12-byte header, and the phase field is
-the unsigned phase word / 512, which is exact in float32 (`isss/bag.py`). So
-the export from a bag carries the same samples a `.bin` would have. Only
-sqlite3 bags are read, and no ROS install is needed.
+The `time_source` attribute says which. Bags of this driver carry the
+calibration in every message (K, boresight, phase signs, sound speed), so the
+export takes it from there; options such as `--k` override it, and a bag in
+which it changes is split like a reconfigured log. MCAP chunks compressed with
+lz4 or zstd need the `lz4` or `zstandard` module (`ros2 bag record` leaves them
+uncompressed by default). `isss/ros2bag.py` reads both storages without ROS.
+
+Old-driver bags still hold the original packet: `extra_channel` is the 12-byte
+header, and the phase field is the unsigned phase word / 512, which is exact in
+float32 (`isss/bag.py`). So the export from such a bag carries the same samples
+a `.bin` would have. Only sqlite3 bags are read, and no ROS install is needed.
+`isss-export` and `isss-export-legacy` each refuse the other's bags.
 
 Every file holds one sample count and one decimation (range). A log in which
 either changes is split into `<stem>.nc`, `<stem>_2.nc`, ... (`part`

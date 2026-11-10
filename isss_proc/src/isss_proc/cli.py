@@ -7,7 +7,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from isss.cli import calibration_args, config_from, load_arrays, run_viewer, view_args
+from isss.cli import calibration_args, load_recording, run_viewer, view_args
 
 
 def filter_args(parser: argparse.ArgumentParser) -> None:
@@ -64,9 +64,8 @@ def main_view(argv: list[str] | None = None) -> None:
     from isss.viz import PingViewer
     from isss_proc.filters import CrossTalk
 
-    config = config_from(args)
     try:
-        arrays = load_arrays(args.file, args)
+        arrays, config = load_recording(args.file, args)
     except ValueError as exc:
         parser.error(str(exc))
     arrays = cleaned(arrays, config, CrossTalk(margin=args.crosstalk_margin))
@@ -98,7 +97,7 @@ def main_process(argv: list[str] | None = None) -> None:
     from isss_proc.pipeline import Stream
     from isss_proc.swath import Swath
 
-    parser = argparse.ArgumentParser(description="Filter an ISSS recording (.bin, .nc or old-driver bag)")
+    parser = argparse.ArgumentParser(description="Filter an ISSS recording (.bin, .nc, or a rosbag2 bag of either driver)")
     parser.add_argument("file", type=Path)
     parser.add_argument("-o", "--out", type=Path, help="Save the kept returns (sensor frame) to this .npz")
     parser.add_argument("--labels", type=Path,
@@ -109,9 +108,8 @@ def main_process(argv: list[str] | None = None) -> None:
     filter_args(parser)
     args = parser.parse_args(argv)
 
-    config = config_from(args)
     try:
-        arrays = load_arrays(args.file, args)
+        arrays, config = load_recording(args.file, args)
     except ValueError as exc:
         parser.error(str(exc))
     if arrays.n_pings == 0:
@@ -176,9 +174,8 @@ def main_crosstalk(argv: list[str] | None = None) -> None:
     calibration_args(parser)
     args = parser.parse_args(argv)
 
-    config = config_from(args)
     try:
-        arrays = load_arrays(args.file, args)
+        arrays, config = load_recording(args.file, args)
     except ValueError as exc:
         parser.error(str(exc))
     if arrays.n_pings == 0:

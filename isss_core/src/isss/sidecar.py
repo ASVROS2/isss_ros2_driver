@@ -106,6 +106,24 @@ def new_sidecar(bin_path: Path, config: SonarConfig, register_writes: Iterable[t
     }
 
 
+def recorded_config(sidecar: dict[str, Any] | None) -> SonarConfig | None:
+    """The calibration (and first segment's range and sample count) a log was recorded with, if the sidecar has it."""
+    calibration = (sidecar or {}).get("calibration")
+    if not calibration:
+        return None
+    first = (sidecar.get("segments") or [{}])[0]
+    d = SonarConfig()
+    return SonarConfig(
+        range_m=float(first.get("range_m", d.range_m)),
+        num_samples=int(first.get("num_samples", d.num_samples)),
+        sound_velocity=float(calibration.get("sound_velocity", d.sound_velocity)),
+        counts_per_unit_sine=float(calibration.get("counts_per_unit_sine", d.counts_per_unit_sine)),
+        boresight_depression_deg=float(calibration.get("boresight_depression_deg", d.boresight_depression_deg)),
+        port_phase_sign=int(calibration.get("port_phase_sign", d.port_phase_sign)),
+        starboard_phase_sign=int(calibration.get("starboard_phase_sign", d.starboard_phase_sign)),
+    )
+
+
 def write_sidecar(bin_path: Path, data: dict[str, Any]) -> None:
     """Write atomically, so a reader never sees half a file."""
     path = sidecar_path(bin_path)
